@@ -161,6 +161,9 @@ pub enum LoadingBarType {
         profile_path: String,
         profile_name: String,
     },
+    ServerDownload {
+        name: String,
+    },
     ProfileUpdate {
         profile_path: String,
         profile_name: String,

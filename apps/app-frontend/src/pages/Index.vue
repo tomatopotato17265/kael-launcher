@@ -7,6 +7,7 @@ import { useRoute } from 'vue-router'
 
 import RowDisplay from '@/components/RowDisplay.vue'
 import RecentWorldsList from '@/components/ui/world/RecentWorldsList.vue'
+import { get_default_user, users } from '@/helpers/auth.js'
 import { get_search_results } from '@/helpers/cache.js'
 import { profile_listener } from '@/helpers/events'
 import { list } from '@/helpers/profile.js'
@@ -20,6 +21,31 @@ const breadcrumbs = useBreadcrumbs()
 breadcrumbs.setRootContext({ name: 'Home', link: route.path })
 
 const instances = ref<GameInstance[]>([])
+
+const currentUsername = ref<string | null>(null)
+const defaultUserId = await get_default_user().catch(() => null)
+if (defaultUserId) {
+	const allUsers = await users().catch(() => [])
+	const match = allUsers.find((u) => u.profile.id === defaultUserId)
+	currentUsername.value = match?.profile?.name ?? null
+}
+
+const now = ref(new Date())
+const nowInterval = setInterval(() => {
+	now.value = new Date()
+}, 30_000)
+
+const greeting = computed(() => {
+	const h = now.value.getHours()
+	const m = now.value.getMinutes()
+	if (h === 3 && m === 14) return 'Go to sleep bleh.'
+	const name = currentUsername.value
+	let period: string
+	if (h >= 4 && h < 12) period = 'Good morning'
+	else if (h >= 12 && h < 17) period = 'Good afternoon'
+	else period = 'Good evening'
+	return name ? `${period}, ${name}.` : `${period}.`
+})
 
 const featuredModpacks = ref<SearchResult[]>([])
 const featuredMods = ref<SearchResult[]>([])
@@ -97,13 +123,13 @@ const unlistenProfile = await profile_listener(
 
 onUnmounted(() => {
 	unlistenProfile()
+	clearInterval(nowInterval)
 })
 </script>
 
 <template>
 	<div class="p-6 flex flex-col gap-2">
-		<h1 v-if="recentInstances?.length > 0" class="m-0 text-2xl font-extrabold">Welcome back!</h1>
-		<h1 v-else class="m-0 text-2xl font-extrabold">Welcome to Modrinth App!</h1>
+		<h1 class="m-0 text-2xl font-extrabold">{{ greeting }}</h1>
 		<RecentWorldsList :recent-instances="recentInstances" />
 		<RowDisplay
 			v-if="hasFeaturedProjects"

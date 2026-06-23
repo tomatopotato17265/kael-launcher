@@ -184,6 +184,21 @@ impl DirectoryInfo {
         self.config_dir.join(CACHES_FOLDER_NAME)
     }
 
+    #[inline]
+    pub fn servers_dir(&self) -> PathBuf {
+        self.config_dir.join("servers")
+    }
+
+    #[inline]
+    pub fn server_dir(&self, id: &str) -> PathBuf {
+        self.servers_dir().join(id)
+    }
+
+    #[inline]
+    pub fn playit_dir(&self) -> PathBuf {
+        self.metadata_dir().join("playit")
+    }
+
     /// Get path from environment variable
     #[inline]
     fn env_path(name: &str) -> Option<PathBuf> {

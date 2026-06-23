@@ -2,6 +2,7 @@
 pub mod cache;
 pub mod friends;
 pub mod handler;
+pub mod hosting;
 pub mod jre;
 pub mod logs;
 pub mod metadata;
@@ -20,8 +21,9 @@ pub mod data {
     pub use crate::state::{
         CacheBehaviour, CacheValueType, ContentItem, ContentItemOwner,
         ContentItemProject, ContentItemVersion, Credentials, Dependency,
-        DirectoryInfo, Hooks, JavaVersion, LinkedData, LinkedModpackInfo,
-        MemorySettings, ModLoader, ModrinthCredentials, Organization,
+        DirectoryInfo, Hooks, HostedServer, JavaVersion, LinkedData,
+        LinkedModpackInfo, MemorySettings, ModLoader, ModrinthCredentials,
+        Organization, PlayitAccount,
         OwnerType, ProcessMetadata, ProfileFile, Project, ProjectType,
         ProjectV3, SearchResult, SearchResults, SearchResultsV3, Settings,
         TeamMember, Theme, User, UserFriend, Version, WindowSize,
@@ -34,7 +36,7 @@ pub mod prelude {
         State,
         data::*,
         event::CommandPayload,
-        jre, metadata, minecraft_auth, mr_auth, pack, process,
+        hosting, jre, metadata, minecraft_auth, mr_auth, pack, process,
         profile::{self, Profile, create},
         settings,
         state::ReleaseChannel,

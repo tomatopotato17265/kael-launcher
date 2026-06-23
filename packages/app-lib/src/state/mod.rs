@@ -23,6 +23,12 @@ pub use self::settings::*;
 mod process;
 pub use self::process::*;
 
+mod hosted_servers;
+pub use self::hosted_servers::*;
+
+mod hosting_process;
+pub use self::hosting_process::*;
+
 mod java_globals;
 pub use self::java_globals::*;
 
@@ -74,6 +80,9 @@ pub struct State {
 
     /// Process manager
     pub process_manager: ProcessManager,
+
+    /// Manager for hosted Minecraft servers and their playit agents
+    pub hosting_manager: HostingManager,
 
     // NOTE: we explicitly must NOT store the app identifier in the state object,
     // because creating the state object is fallible (e.g. database missing),
@@ -191,6 +200,8 @@ impl State {
 
         let process_manager = ProcessManager::new();
 
+        let hosting_manager = HostingManager::new();
+
         let friends_socket = FriendsSocket::new();
 
         Ok(Arc::new(Self {
@@ -200,6 +211,7 @@ impl State {
             api_semaphore,
             discord_rpc,
             process_manager,
+            hosting_manager,
             friends_socket,
             restart_after_pending_update: AtomicBool::new(false),
             pool,

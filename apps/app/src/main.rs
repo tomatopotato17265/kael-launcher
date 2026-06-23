@@ -259,6 +259,7 @@ fn main() {
 
     builder = builder
         .plugin(api::auth::init())
+        .plugin(api::hosting::init())
         .plugin(api::import::init())
         .plugin(api::logs::init())
         .plugin(api::jre::init())
