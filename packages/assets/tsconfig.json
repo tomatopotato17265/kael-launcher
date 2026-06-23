@@ -1,0 +1,3 @@
+{
+	"extends": "@kael/tooling-config/typescript/vue.json"
+}
