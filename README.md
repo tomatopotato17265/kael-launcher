@@ -39,4 +39,4 @@ If you need help with the Modrinth web interface or app, please visit our [suppo
 All packages in this repository are licensed under their respective licenses. Refer to the LICENSE file in each package for more information.
 
 
-> "Kael is a personal project built by a high schooler. Most of the code is forked from the Modrinth App; my additions were written with AI assistance. I made it to solve my personal problems with Minecraft launchers, and I'm sharing it in case it's useful to others."
+> "Kael is a personal project built by a high schooler. Most of the code is forked from the Modrinth App; my additions were written with AI assistance. I made it as a solution to my qualms with Minecraft launchers, and I'm sharing it in case it's useful to others."

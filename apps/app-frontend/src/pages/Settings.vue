@@ -145,8 +145,8 @@ const messages = defineMessages({
 </script>
 
 <template>
-	<div class="flex h-full overflow-hidden">
-		<nav class="flex flex-col gap-1 p-4 w-56 shrink-0 border-r border-divider overflow-y-auto">
+	<div class="flex">
+		<nav class="sticky top-0 self-start flex flex-col gap-1 p-4 w-56 shrink-0 border-r border-divider overflow-y-auto max-h-[calc(100vh_-_var(--top-bar-height))]">
 			<button
 				v-for="(tab, i) in visibleTabs"
 				:key="i"
@@ -200,9 +200,9 @@ const messages = defineMessages({
 			</div>
 		</nav>
 
-		<div class="flex-1 overflow-y-auto p-6">
+		<div class="flex-1 p-6">
 			<Suspense>
-				<component :is="visibleTabs[selectedTab]?.content" />
+				<component :is="visibleTabs[selectedTab]?.content" v-if="visibleTabs[selectedTab]?.content" />
 			</Suspense>
 		</div>
 	</div>
