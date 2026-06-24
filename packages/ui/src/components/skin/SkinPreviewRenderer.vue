@@ -248,6 +248,7 @@ const {
 const {
 	ignoreControlClick,
 	modelRotation,
+	pitchRotation,
 	onCanvasClick,
 	onPointerDown,
 	onPointerMove,
@@ -334,7 +335,7 @@ const nametagStyle = computed(() => ({
 }))
 
 const animatedModelGroupRotation = computed<SkinPreviewTuple>(() => [
-	0,
+	pitchRotation.value,
 	modelRotation.value,
 	clickImpulseRotationZ.value,
 ])

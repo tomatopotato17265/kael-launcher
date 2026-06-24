@@ -10,22 +10,28 @@ export function useSkinPreviewControls({
 	onClickWithoutDrag: () => void
 }) {
 	const modelRotation = ref((initialRotation.value ?? 15.75) + Math.PI)
+	const pitchRotation = ref(0)
 	const isDragging = ref(false)
 	const previousX = ref(0)
+	const previousY = ref(0)
 	const hasDragged = ref(false)
 
 	function onPointerDown(event: PointerEvent) {
 		;(event.currentTarget as HTMLElement).setPointerCapture(event.pointerId)
 		isDragging.value = true
 		previousX.value = event.clientX
+		previousY.value = event.clientY
 		hasDragged.value = false
 	}
 
 	function onPointerMove(event: PointerEvent) {
 		if (!isDragging.value) return
 		const deltaX = event.clientX - previousX.value
+		const deltaY = event.clientY - previousY.value
 		modelRotation.value += deltaX * 0.01
+		pitchRotation.value = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitchRotation.value - deltaY * 0.01))
 		previousX.value = event.clientX
+		previousY.value = event.clientY
 		hasDragged.value = true
 	}
 
@@ -53,6 +59,7 @@ export function useSkinPreviewControls({
 	return {
 		ignoreControlClick,
 		modelRotation,
+		pitchRotation,
 		onCanvasClick,
 		onPointerDown,
 		onPointerMove,
