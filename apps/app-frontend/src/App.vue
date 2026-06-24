@@ -70,7 +70,6 @@ import FriendsList from '@/components/ui/friends/FriendsList.vue'
 import AddServerToInstanceModal from '@/components/ui/install_flow/AddServerToInstanceModal.vue'
 import UnknownPackWarningModal from '@/components/ui/install_flow/UnknownPackWarningModal.vue'
 import MinecraftAuthErrorModal from '@/components/ui/minecraft-auth-error-modal/MinecraftAuthErrorModal.vue'
-import AppSettingsModal from '@/components/ui/modal/AppSettingsModal.vue'
 import InstallToPlayModal from '@/components/ui/modal/InstallToPlayModal.vue'
 import ModpackAlreadyInstalledModal from '@/components/ui/modal/ModpackAlreadyInstalledModal.vue'
 import UpdateToPlayModal from '@/components/ui/modal/UpdateToPlayModal.vue'
@@ -1240,9 +1239,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				</span>
 			</div>
 		</Transition>
-		<Suspense>
-			<AppSettingsModal ref="settingsModal" />
-		</Suspense>
 		<CreationFlowModal
 			ref="installationModal"
 			type="instance"
@@ -1310,7 +1306,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			<div class="flex flex-grow"></div>
 			<NavButton
 				v-tooltip.right="formatMessage(commonMessages.settingsLabel)"
-				:to="() => $refs.settingsModal.show()"
+				to="/settings"
 			>
 				<SettingsIcon />
 			</NavButton>

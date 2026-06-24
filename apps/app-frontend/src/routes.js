@@ -45,6 +45,14 @@ export default new createRouter({
 			},
 		},
 		{
+			path: '/settings',
+			name: 'Settings',
+			component: Pages.Settings,
+			meta: {
+				breadcrumb: [{ name: 'Settings' }],
+			},
+		},
+		{
 			path: '/skins',
 			name: 'Skin selector',
 			component: Pages.Skins,
