@@ -19,6 +19,7 @@ pub struct Settings {
     pub advanced_rendering: bool,
     pub native_decorations: bool,
     pub toggle_sidebar: bool,
+    pub brand_color: Option<String>,
 
     pub telemetry: bool,
     pub discord_rpc: bool,
@@ -66,7 +67,7 @@ pub enum FeatureFlag {
 }
 
 impl Settings {
-    const CURRENT_VERSION: usize = 3;
+    const CURRENT_VERSION: usize = 4;
 
     pub async fn get(
         exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
@@ -83,6 +84,7 @@ impl Settings {
                 hook_pre_launch, hook_wrapper, hook_post_exit,
                 custom_dir, prev_custom_dir, migrated, json(feature_flags) feature_flags, toggle_sidebar,
                 skipped_update, pending_update_toast_for_version, auto_download_updates,
+                brand_color,
                 version
             FROM settings
             "
@@ -101,6 +103,7 @@ impl Settings {
             advanced_rendering: res.advanced_rendering == 1,
             native_decorations: res.native_decorations == 1,
             toggle_sidebar: res.toggle_sidebar == 1,
+            brand_color: res.brand_color,
             telemetry: res.telemetry == 1,
             discord_rpc: res.discord_rpc == 1,
             developer_mode: res.developer_mode == 1,
@@ -204,7 +207,9 @@ impl Settings {
                 pending_update_toast_for_version = $31,
                 auto_download_updates = $32,
 
-                version = $33
+                brand_color = $33,
+
+                version = $34
             ",
             max_concurrent_writes,
             max_concurrent_downloads,
@@ -238,6 +243,7 @@ impl Settings {
             self.skipped_update,
             self.pending_update_toast_for_version,
             self.auto_download_updates,
+            self.brand_color,
             version,
         )
         .execute(exec)
@@ -306,6 +312,9 @@ impl Settings {
                 }
 
                 self.version = 3;
+            }
+            3 => {
+                self.version = 4;
             }
             version => {
                 return Err(crate::ErrorKind::OtherError(format!(

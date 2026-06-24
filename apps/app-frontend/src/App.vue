@@ -325,6 +325,7 @@ async function setupApp() {
 		developer_mode,
 		feature_flags,
 		pending_update_toast_for_version,
+		brand_color,
 	} = await getSettings()
 
 	// Initialize locale from saved settings
@@ -352,6 +353,7 @@ async function setupApp() {
 	themeStore.toggleSidebar = toggle_sidebar
 	themeStore.devMode = developer_mode
 	themeStore.featureFlags = feature_flags
+	themeStore.applyBrandColor(brand_color ?? null)
 	stateInitialized.value = true
 
 	isMaximized.value = await getCurrentWindow().isMaximized()

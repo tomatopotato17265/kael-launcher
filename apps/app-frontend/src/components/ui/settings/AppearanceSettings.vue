@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Combobox, defineMessages, ThemeSelector, Toggle, useVIntl } from '@kael/ui'
+import { PaletteIcon } from '@kael/assets'
+import { ButtonStyled, Combobox, defineMessages, ThemeSelector, Toggle, useVIntl } from '@kael/ui'
 import { ref, watch } from 'vue'
 
 import { get, set } from '@/helpers/settings.ts'
@@ -15,6 +16,14 @@ const skipUnknownPackWarningFlag: FeatureFlag = 'skip_unknown_pack_warning'
 const showPlayTimeFlag: FeatureFlag = 'show_instance_play_time'
 
 const messages = defineMessages({
+	brandColorTitle: {
+		id: 'app.appearance-settings.brand-color.title',
+		defaultMessage: 'Edit theme',
+	},
+	brandColorDescription: {
+		id: 'app.appearance-settings.brand-color.description',
+		defaultMessage: 'Customize the accent color used throughout the app.',
+	},
 	colorThemeTitle: {
 		id: 'app.appearance-settings.color-theme.title',
 		defaultMessage: 'Color theme',
@@ -113,6 +122,7 @@ const messages = defineMessages({
 
 const os = ref(await getOS())
 const settings = ref(await get())
+const colorInputRef = ref<HTMLInputElement | null>(null)
 
 watch(
 	settings,
@@ -139,6 +149,31 @@ watch(
 		:theme-options="themeStore.getThemeOptions()"
 		system-theme-color="system"
 	/>
+
+	<div class="mt-6 flex items-center justify-between">
+		<div>
+			<h2 class="m-0 text-lg font-semibold text-contrast">
+				{{ formatMessage(messages.brandColorTitle) }}
+			</h2>
+			<p class="m-0 mt-1">{{ formatMessage(messages.brandColorDescription) }}</p>
+		</div>
+		<ButtonStyled>
+			<button @click="colorInputRef?.showPicker()">
+				<PaletteIcon :style="settings.brand_color ? { color: settings.brand_color } : {}" />
+			</button>
+		</ButtonStyled>
+		<input
+			ref="colorInputRef"
+			type="color"
+			class="sr-only"
+			:value="settings.brand_color ?? '#00af5c'"
+			@change="(e) => {
+				const color = (e.target as HTMLInputElement).value
+				settings.brand_color = color
+				themeStore.applyBrandColor(color)
+			}"
+		/>
+	</div>
 
 	<div class="mt-6 flex items-center justify-between">
 		<div>

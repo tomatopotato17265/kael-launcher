@@ -30,6 +30,8 @@ export type ThemeStore = {
 
 	devMode: boolean
 	featureFlags: FeatureFlags
+
+	brandColor: string | null
 }
 
 export const DEFAULT_THEME_STORE: ThemeStore = {
@@ -40,6 +42,8 @@ export const DEFAULT_THEME_STORE: ThemeStore = {
 
 	devMode: false,
 	featureFlags: DEFAULT_FEATURE_FLAGS,
+
+	brandColor: null,
 }
 
 export const useTheming = defineStore('themeStore', {
@@ -77,6 +81,22 @@ export const useTheming = defineStore('themeStore', {
 		},
 		getThemeOptions() {
 			return THEME_OPTIONS
+		},
+		applyBrandColor(color: string | null) {
+			this.brandColor = color
+			const root = document.documentElement
+			if (!color) {
+				root.style.removeProperty('--color-brand')
+				root.style.removeProperty('--color-brand-highlight')
+				root.style.removeProperty('--color-brand-shadow')
+				return
+			}
+			const r = parseInt(color.slice(1, 3), 16)
+			const g = parseInt(color.slice(3, 5), 16)
+			const b = parseInt(color.slice(5, 7), 16)
+			root.style.setProperty('--color-brand', color)
+			root.style.setProperty('--color-brand-highlight', `rgba(${r}, ${g}, ${b}, 0.25)`)
+			root.style.setProperty('--color-brand-shadow', `rgba(${r}, ${g}, ${b}, 0.7)`)
 		},
 	},
 })

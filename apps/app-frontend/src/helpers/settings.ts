@@ -69,6 +69,8 @@ export type AppSettings = {
 	pending_update_toast_for_version: string | null
 	auto_download_updates: boolean | null
 
+	brand_color: string | null
+
 	version: number
 }
 

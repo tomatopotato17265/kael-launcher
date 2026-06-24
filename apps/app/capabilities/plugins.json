@@ -93,6 +93,7 @@
 			]
 		},
 		"auth:default",
+		"hosting:default",
 		"import:default",
 		"jre:default",
 		"logs:default",
