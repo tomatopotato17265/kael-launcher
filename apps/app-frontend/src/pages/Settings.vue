@@ -8,6 +8,7 @@ import {
 	PaintbrushIcon,
 	ShieldIcon,
 	ToggleRightIcon,
+	HeartIcon,
 } from '@kael/assets'
 import {
 	commonMessages,
@@ -29,6 +30,7 @@ import JavaSettings from '@/components/ui/settings/JavaSettings.vue'
 import LanguageSettings from '@/components/ui/settings/LanguageSettings.vue'
 import PrivacySettings from '@/components/ui/settings/PrivacySettings.vue'
 import ResourceManagementSettings from '@/components/ui/settings/ResourceManagementSettings.vue'
+import CreditsSettings from '@/components/ui/settings/CreditsSettings.vue'
 import { get, set } from '@/helpers/settings.ts'
 import { injectAppUpdateDownloadProgress } from '@/providers/download-progress.ts'
 import { useTheming } from '@/store/state'
@@ -90,6 +92,14 @@ const tabs = [
 		}),
 		icon: GaugeIcon,
 		content: ResourceManagementSettings,
+	},
+	{
+		name: defineMessage({
+			id: 'app.settings.tabs.credits',
+			defaultMessage: 'Credits',
+		}),
+		icon: HeartIcon,
+		content: CreditsSettings,
 	},
 	{
 		name: commonSettingsMessages.featureFlags,

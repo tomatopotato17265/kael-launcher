@@ -16,14 +16,6 @@ const skipUnknownPackWarningFlag: FeatureFlag = 'skip_unknown_pack_warning'
 const showPlayTimeFlag: FeatureFlag = 'show_instance_play_time'
 
 const messages = defineMessages({
-	brandColorTitle: {
-		id: 'app.appearance-settings.brand-color.title',
-		defaultMessage: 'Edit theme',
-	},
-	brandColorDescription: {
-		id: 'app.appearance-settings.brand-color.description',
-		defaultMessage: 'Customize the accent color used throughout the app.',
-	},
 	colorThemeTitle: {
 		id: 'app.appearance-settings.color-theme.title',
 		defaultMessage: 'Color theme',
@@ -31,6 +23,14 @@ const messages = defineMessages({
 	colorThemeDescription: {
 		id: 'app.appearance-settings.color-theme.description',
 		defaultMessage: 'Select your preferred color theme for Modrinth App.',
+	},
+	editColorTitle: {
+		id: 'app.appearance-settings.brand-color.title',
+		defaultMessage: 'Edit theme',
+	},
+	editColorDescription: {
+		id: 'app.appearance-settings.brand-color.description',
+		defaultMessage: 'Customize the accent color used throughout the app.',
 	},
 	advancedRenderingTitle: {
 		id: 'app.appearance-settings.advanced-rendering.title',
@@ -153,9 +153,9 @@ watch(
 	<div class="mt-6 flex items-center justify-between">
 		<div>
 			<h2 class="m-0 text-lg font-semibold text-contrast">
-				{{ formatMessage(messages.brandColorTitle) }}
+				{{ formatMessage(messages.editColorTitle) }}
 			</h2>
-			<p class="m-0 mt-1">{{ formatMessage(messages.brandColorDescription) }}</p>
+			<p class="m-0 mt-1">{{ formatMessage(messages.editColorDescription) }}</p>
 		</div>
 		<ButtonStyled>
 			<button @click="colorInputRef?.showPicker()">

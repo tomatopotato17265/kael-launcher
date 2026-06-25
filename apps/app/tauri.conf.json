@@ -93,7 +93,11 @@
 				"minWidth": 1100,
 				"visible": false,
 				"zoomHotkeysEnabled": false,
-				"decorations": false
+				"decorations": false,
+				"trafficLightPosition": {
+					"x": 15.0,
+					"y": 25.0
+				}
 			}
 		],
 		"security": {
