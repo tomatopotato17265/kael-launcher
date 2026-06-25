@@ -12,14 +12,14 @@
 			<span class="text-lg font-extrabold text-contrast">
 				{{ formatMessage(editorTitle) }}
 			</span>
-			<template v-if="editorMode">
+			<div v-if="editorMode" class="ml-auto flex items-center gap-2">
 				<ButtonStyled type="outlined">
 					<button @click="cancelEditor"><XIcon /> {{ formatMessage(commonMessages.cancelButton) }}</button>
 				</ButtonStyled>
 				<ButtonStyled color="brand">
 					<button @click="applyEditorTexture"><CheckIcon /> {{ formatMessage(messages.applyEditorButton) }}</button>
 				</ButtonStyled>
-			</template>
+			</div>
 		</template>
 
 		<div v-if="editorMode" class="flex flex-col">
