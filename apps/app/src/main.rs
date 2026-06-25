@@ -64,34 +64,6 @@ fn show_window(app: tauri::AppHandle) {
     }
 }
 
-#[tracing::instrument(skip_all)]
-#[tauri::command]
-fn open_skin_editor(
-    app: tauri::AppHandle,
-    texture: String,
-    variant: String,
-) -> api::Result<()> {
-    if let Some(existing) = app.get_webview_window("skin-editor") {
-        existing.close()?;
-    }
-
-    let payload = serde_json::json!({ "variant": variant, "texture": texture });
-    let init_script = format!("window.KAEL_PAYLOAD = {payload};");
-
-    tauri::WebviewWindowBuilder::new(
-        &app,
-        "skin-editor",
-        tauri::WebviewUrl::App("skin-editor/index.html".into()),
-    )
-    .title("Edit Skin")
-    .inner_size(1280.0, 800.0)
-    .center()
-    .initialization_script(&init_script)
-    .build()?;
-
-    Ok(())
-}
-
 #[tauri::command]
 fn is_dev() -> bool {
     cfg!(debug_assertions)
@@ -287,7 +259,6 @@ fn main() {
             set_restart_after_pending_update,
             toggle_decorations,
             show_window,
-            open_skin_editor,
             restart_app,
         ]);
 

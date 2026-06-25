@@ -1,12 +1,39 @@
 <template>
-	<NewModal ref="modal" :on-hide="handleModalHide">
+	<NewModal
+		ref="modal"
+		:on-hide="handleModalHide"
+		:max-width="editorMode ? '95vw' : undefined"
+		:width="editorMode ? '95vw' : undefined"
+		:no-padding="editorMode"
+		:close-on-click-outside="!editorMode"
+		:close-on-esc="!editorMode"
+	>
 		<template #title>
 			<span class="text-lg font-extrabold text-contrast">
-				{{ formatMessage(mode === 'edit' ? messages.editSkinTitle : messages.addSkinTitle) }}
+				{{ formatMessage(editorTitle) }}
 			</span>
+			<template v-if="editorMode">
+				<ButtonStyled type="outlined">
+					<button @click="cancelEditor"><XIcon /> {{ formatMessage(commonMessages.cancelButton) }}</button>
+				</ButtonStyled>
+				<ButtonStyled color="brand">
+					<button @click="applyEditorTexture"><CheckIcon /> {{ formatMessage(messages.applyEditorButton) }}</button>
+				</ButtonStyled>
+			</template>
 		</template>
 
-		<div class="flex flex-col md:flex-row gap-6">
+		<div v-if="editorMode" class="flex flex-col">
+			<div class="h-[80vh] w-full">
+				<iframe
+					ref="editorFrame"
+					src="/skin-editor/index.html"
+					class="w-full h-full border-0"
+					@load="onEditorFrameLoad"
+				/>
+			</div>
+		</div>
+
+		<div v-else class="flex flex-col md:flex-row gap-6">
 			<div class="h-[25rem] w-[16rem] min-w-[16rem] flex-shrink-0 md:self-center">
 				<SkinPreviewRenderer
 					:variant="variant"
@@ -116,7 +143,7 @@
 			</div>
 		</div>
 
-		<template #actions>
+		<template v-if="!editorMode" #actions>
 			<div class="flex gap-2 justify-end">
 				<ButtonStyled type="outlined">
 					<button :disabled="isSaving" @click="hide">
@@ -152,7 +179,6 @@ import {
 	useVIntl,
 } from '@kael/ui'
 import { arrayBufferToBase64 } from '@kael/utils'
-import { invoke } from '@tauri-apps/api/core'
 import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 
 import {
@@ -188,6 +214,14 @@ const messages = defineMessages({
 	editTextureButton: {
 		id: 'app.skins.modal.edit-texture-button',
 		defaultMessage: 'Edit texture',
+	},
+	editorTitle: {
+		id: 'app.skins.modal.editor-title',
+		defaultMessage: 'Editing texture',
+	},
+	applyEditorButton: {
+		id: 'app.skins.modal.apply-editor-button',
+		defaultMessage: 'Apply changes',
 	},
 	armStyleSection: {
 		id: 'app.skins.modal.arm-style-section',
@@ -252,6 +286,18 @@ const isSaving = ref(false)
 
 const uploadedTextureUrl = ref<SkinTextureUrl | null>(null)
 const previewSkin = ref<string>('')
+
+const editorFrame = useTemplateRef<HTMLIFrameElement>('editorFrame')
+const editorMode = ref(false)
+const editorPayload = ref<{ variant: SkinModel; texture: string } | null>(null)
+
+const editorTitle = computed(() =>
+	editorMode.value
+		? messages.editorTitle
+		: mode.value === 'edit'
+			? messages.editSkinTitle
+			: messages.addSkinTitle,
+)
 
 const variant = ref<SkinModel>('CLASSIC')
 const selectedCape = ref<Cape | undefined>(undefined)
@@ -356,6 +402,8 @@ function resetState() {
 	variant.value = 'CLASSIC'
 	selectedCape.value = undefined
 	isSaving.value = false
+	editorMode.value = false
+	editorPayload.value = null
 }
 
 function handleModalHide() {
@@ -410,14 +458,74 @@ function openTextureFileBrowser() {
 	textureFileInput.value?.click()
 }
 
-async function openInEditor() {
+function openInEditor() {
 	const texture =
 		uploadedTextureUrl.value?.normalized || previewSkin.value || currentSkin.value?.texture
 	if (!texture) return
+	editorPayload.value = { variant: variant.value, texture }
+	editorMode.value = true
+}
+
+function pushPayloadToEditor() {
+	const frame = editorFrame.value
+	const payload = editorPayload.value
+	if (!frame || !payload) return
+
+	const frameWindow = frame.contentWindow as
+		| (Window & {
+				KAEL_PAYLOAD?: unknown
+				initializeKaelEditor?: (payload: unknown) => void
+		  })
+		| null
+	if (!frameWindow) return
+
+	frameWindow.KAEL_PAYLOAD = payload
+
+	let attempts = 0
+	const tryInit = () => {
+		if (!editorMode.value || editorFrame.value?.contentWindow !== frameWindow) return
+		if (typeof frameWindow.initializeKaelEditor === 'function') {
+			frameWindow.initializeKaelEditor(payload)
+			return
+		}
+		if (attempts++ > 200) return
+		setTimeout(tryInit, 50)
+	}
+	tryInit()
+}
+
+function onEditorFrameLoad() {
+	pushPayloadToEditor()
+}
+
+function cancelEditor() {
+	editorMode.value = false
+	editorPayload.value = null
+}
+
+async function applyEditorTexture() {
+	const frameWindow = editorFrame.value?.contentWindow as
+		| (Window & { kaelExportTexture?: () => string | null })
+		| null
+	const exported = frameWindow?.kaelExportTexture?.()
+
+	if (!exported) {
+		editorMode.value = false
+		editorPayload.value = null
+		return
+	}
+
 	try {
-		await invoke('open_skin_editor', { texture, variant: variant.value })
+		const skinTextureNormalized = await normalize_skin_texture(exported)
+		await setUploadedTexture({
+			original: exported,
+			normalized: `data:image/png;base64,${arrayBufferToBase64(skinTextureNormalized)}`,
+		})
 	} catch (error) {
 		handleError(error)
+	} finally {
+		editorMode.value = false
+		editorPayload.value = null
 	}
 }
 
