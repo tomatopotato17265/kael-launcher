@@ -248,7 +248,7 @@ async function logout(id: string) {
 	trackEvent('AccountLogOut')
 }
 
-const unlisten = await process_listener(async (e) => {
+const unlisten = await process_listener(async (e: any) => {
 	if (e.event === 'launched') {
 		await refreshValues()
 	}
