@@ -129,6 +129,23 @@ import { AppPopupNotificationManager } from './providers/app-popup-notifications
 const themeStore = useTheming()
 const router = useRouter()
 const route = useRoute()
+
+const lastDiscoverRoute = ref('/browse/modpack')
+
+router.afterEach((to, from) => {
+	if (from.path.startsWith('/browse') && !from.query.i) {
+		lastDiscoverRoute.value = from.fullPath
+	} else if (
+		from.path.startsWith('/project') &&
+		!from.query.i &&
+		typeof from.query.b === 'string' &&
+		from.query.b.startsWith('/browse/')
+	) {
+		lastDiscoverRoute.value = from.fullPath
+	}
+})
+
+const discoverContentTo = computed(() => lastDiscoverRoute.value)
 const APP_LEFT_NAV_WIDTH = '4rem'
 const APP_SIDEBAR_WIDTH = 300
 const PRIDE_FUNDRAISER_END_DATE = new Date('2026-07-01T00:00:00Z').getTime()
@@ -1262,7 +1279,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			</NavButton>
 			<NavButton
 				v-tooltip.right="'Discover content'"
-				to="/browse/modpack"
+				:to="discoverContentTo"
 				:is-primary="() => route.path.startsWith('/browse') && !route.query.i"
 				:is-subpage="(route) => route.path.startsWith('/project') && !route.query.i"
 			>
