@@ -45,6 +45,14 @@ export default new createRouter({
 			},
 		},
 		{
+			path: '/account',
+			name: 'Account',
+			component: Pages.Account,
+			meta: {
+				breadcrumb: [{ name: 'Account' }],
+			},
+		},
+		{
 			path: '/settings',
 			name: 'Settings',
 			component: Pages.Settings,

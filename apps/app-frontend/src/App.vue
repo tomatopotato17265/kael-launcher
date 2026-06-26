@@ -164,7 +164,6 @@ const prideFundraiserEnabled = computed(
 
 const minecraftUsers = ref([])
 const mcLoginDisabled = ref(false)
-const accountMenuOpen = ref(false)
 
 async function signInMinecraft() {
 	mcLoginDisabled.value = true
@@ -1336,24 +1335,13 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				<RefreshCwIcon v-if="mcLoginDisabled" class="animate-spin" />
 				<LogInIcon v-else />
 			</NavButton>
-			<div class="relative" v-if="minecraftUsers.length > 0">
-				<NavButton
-					v-tooltip.right="'Account'"
-					:to="() => (accountMenuOpen = !accountMenuOpen)"
-				>
-					<UserIcon />
-				</NavButton>
-				<div
-					v-if="accountMenuOpen"
-					class="absolute bottom-0 left-full ml-2 z-50 bg-bg-raised border border-divider rounded-lg shadow-lg p-2 flex flex-col gap-1 min-w-[8rem]"
-				>
-					<ButtonStyled>
-						<button @click="logOutMinecraft(); accountMenuOpen = false">
-							<LogOutIcon /> Log out
-						</button>
-					</ButtonStyled>
-				</div>
-			</div>
+			<NavButton
+				v-if="minecraftUsers.length > 0"
+				v-tooltip.right="'Account'"
+				to="/account"
+			>
+				<UserIcon />
+			</NavButton>
 		</div>
 		<div data-tauri-drag-region class="app-grid-statusbar bg-bg-raised h-[--top-bar-height] flex">
 			<div data-tauri-drag-region class="flex min-w-0 flex-1 overflow-hidden p-3">
