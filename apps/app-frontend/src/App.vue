@@ -352,7 +352,7 @@ async function setupApp() {
 	themeStore.toggleSidebar = toggle_sidebar
 	themeStore.devMode = developer_mode
 	themeStore.featureFlags = feature_flags
-	themeStore.applyBrandColor(brand_color ?? null)
+	themeStore.applyBrandColor(brand_color ?? '#7f51f5')
 	stateInitialized.value = true
 
 	isMaximized.value = await getCurrentWindow().isMaximized()

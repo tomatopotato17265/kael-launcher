@@ -5,6 +5,11 @@ dist
 tmp
 /out-tsc
 
+# Vendored Blockbench skin-editor build — must be committed so the in-app
+# skin editor loads without a separate build/download step.
+!/apps/app-frontend/public/skin-editor/dist
+!/apps/app-frontend/public/skin-editor/dist/**
+
 # dependencies
 node_modules
 

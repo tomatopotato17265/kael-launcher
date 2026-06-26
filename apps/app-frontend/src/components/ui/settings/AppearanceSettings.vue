@@ -122,7 +122,6 @@ const messages = defineMessages({
 
 const os = ref(await getOS())
 const settings = ref(await get())
-const colorInputRef = ref<HTMLInputElement | null>(null)
 
 watch(
 	settings,
@@ -158,21 +157,21 @@ watch(
 			<p class="m-0 mt-1">{{ formatMessage(messages.editColorDescription) }}</p>
 		</div>
 		<ButtonStyled>
-			<button @click="colorInputRef?.showPicker()">
+			<label class="button-like relative" for="brand-color-input">
 				<PaletteIcon :style="settings.brand_color ? { color: settings.brand_color } : {}" />
-			</button>
+				<input
+					id="brand-color-input"
+					type="color"
+					class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+					:value="settings.brand_color ?? '#7f51f5'"
+					@change="(e) => {
+						const color = (e.target as HTMLInputElement).value
+						settings.brand_color = color
+						themeStore.applyBrandColor(color)
+					}"
+				/>
+			</label>
 		</ButtonStyled>
-		<input
-			ref="colorInputRef"
-			type="color"
-			class="sr-only"
-			:value="settings.brand_color ?? '#00af5c'"
-			@change="(e) => {
-				const color = (e.target as HTMLInputElement).value
-				settings.brand_color = color
-				themeStore.applyBrandColor(color)
-			}"
-		/>
 	</div>
 
 	<div class="mt-6 flex items-center justify-between">

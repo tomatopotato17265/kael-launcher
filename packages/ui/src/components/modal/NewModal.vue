@@ -145,6 +145,10 @@ import ButtonStyled from '../base/ButtonStyled.vue'
 
 const { formatMessage } = useVIntl()
 
+const emit = defineEmits<{
+	(e: 'request-close'): void
+}>()
+
 const modalBehavior = injectModalBehavior(null)
 const {
 	push: pushModal,
@@ -263,8 +267,12 @@ function show(event?: MouseEvent) {
 	}, 50)
 }
 
-function hide() {
+function hide(options?: { force?: boolean }) {
 	if (props.disableClose) {
+		return
+	}
+	if (props.warnOnClose && !options?.force) {
+		emit('request-close')
 		return
 	}
 	props.onHide?.()

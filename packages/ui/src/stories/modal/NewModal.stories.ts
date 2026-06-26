@@ -212,6 +212,48 @@ export const NotClosable: Story = {
 	}),
 }
 
+export const WarnOnClose: Story = {
+	render: () => ({
+		components: { NewModal, ButtonStyled },
+		setup() {
+			const modalRef = ref<InstanceType<typeof NewModal> | null>(null)
+			const confirmRef = ref<InstanceType<typeof NewModal> | null>(null)
+			const openModal = () => modalRef.value?.show()
+			const onRequestClose = () => confirmRef.value?.show()
+			const keepWorking = () => confirmRef.value?.hide()
+			const confirmClose = () => {
+				confirmRef.value?.hide()
+				modalRef.value?.hide({ force: true })
+			}
+			return { modalRef, confirmRef, openModal, onRequestClose, keepWorking, confirmClose }
+		},
+		template: `
+			<div>
+				<ButtonStyled color="brand">
+					<button @click="openModal">Open Modal (Warn on Close)</button>
+				</ButtonStyled>
+				<NewModal ref="modalRef" header="Edit something" :warn-on-close="true" @request-close="onRequestClose">
+					<p>Try closing this modal via the X, Esc, or clicking outside.</p>
+					<p class="text-secondary mt-2">Closing is intercepted and a confirmation is shown instead.</p>
+				</NewModal>
+				<NewModal ref="confirmRef" header="Are you sure you want to close?" fade="danger" max-width="460px">
+					<div class="flex flex-col gap-4">
+						<p class="m-0 text-secondary">Unsaved changes will be lost.</p>
+						<div class="flex gap-2 justify-start">
+							<ButtonStyled type="outlined">
+								<button @click="confirmClose">Close</button>
+							</ButtonStyled>
+							<ButtonStyled color="brand">
+								<button @click="keepWorking">Keep working</button>
+							</ButtonStyled>
+						</div>
+					</div>
+				</NewModal>
+			</div>
+		`,
+	}),
+}
+
 export const NoPadding: Story = {
 	render: () => ({
 		components: { NewModal, ButtonStyled },

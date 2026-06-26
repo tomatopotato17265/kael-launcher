@@ -7,6 +7,8 @@
 		:no-padding="editorMode"
 		:close-on-click-outside="!editorMode"
 		:close-on-esc="!editorMode"
+		:warn-on-close="!disableSave"
+		@request-close="onRequestClose"
 	>
 		<template #title>
 			<span class="text-lg font-extrabold text-contrast">
@@ -161,6 +163,29 @@
 			</div>
 		</template>
 	</NewModal>
+
+	<NewModal ref="confirmCloseModal" max-width="460px" fade="danger">
+		<template #title>
+			<span class="text-lg font-extrabold text-contrast">
+				{{ formatMessage(messages.confirmCloseTitle) }}
+			</span>
+		</template>
+		<div class="flex flex-col gap-4">
+			<p class="m-0 max-w-[35rem] text-secondary">
+				{{ formatMessage(messages.confirmCloseDescription) }}
+			</p>
+			<div class="flex gap-2 justify-start">
+				<ButtonStyled type="outlined">
+					<button @click="confirmClose">
+						<XIcon />{{ formatMessage(commonMessages.closeButton) }}
+					</button>
+				</ButtonStyled>
+				<ButtonStyled color="brand">
+					<button @click="keepWorking">{{ formatMessage(messages.keepWorkingButton) }}</button>
+				</ButtonStyled>
+			</div>
+		</div>
+	</NewModal>
 </template>
 
 <script setup lang="ts">
@@ -271,12 +296,25 @@ const messages = defineMessages({
 		id: 'app.skins.modal.save-skin-button',
 		defaultMessage: 'Save skin',
 	},
+	confirmCloseTitle: {
+		id: 'app.skins.modal.confirm-close-title',
+		defaultMessage: 'Are you sure you want to close?',
+	},
+	confirmCloseDescription: {
+		id: 'app.skins.modal.confirm-close-description',
+		defaultMessage: 'Unsaved changes will be lost.',
+	},
+	keepWorkingButton: {
+		id: 'app.skins.modal.keep-working-button',
+		defaultMessage: 'Keep working',
+	},
 })
 
 const { formatMessage } = useVIntl()
 const { handleError } = injectNotificationManager()
 
 const modal = useTemplateRef('modal')
+const confirmCloseModal = useTemplateRef('confirmCloseModal')
 const textureFileInput = useTemplateRef<HTMLInputElement>('textureFileInput')
 const capeListRef = ref<HTMLElement | null>(null)
 const capeListMaxHeight = ref(`${CAPE_LIST_MAX_HEIGHT}px`)
@@ -447,7 +485,24 @@ async function setUploadedTexture(skinTextureUrl: SkinTextureUrl) {
 }
 
 function hide() {
+	if (!disableSave.value) {
+		onRequestClose()
+		return
+	}
 	modal.value?.hide()
+}
+
+function onRequestClose() {
+	confirmCloseModal.value?.show()
+}
+
+function keepWorking() {
+	confirmCloseModal.value?.hide()
+}
+
+function confirmClose() {
+	confirmCloseModal.value?.hide()
+	modal.value?.hide({ force: true })
 }
 
 function selectCape(cape: Cape | undefined) {
@@ -608,7 +663,7 @@ async function save() {
 			})
 		}
 
-		hide()
+		modal.value?.hide({ force: true })
 	} catch (err) {
 		handleError(err)
 	} finally {
