@@ -19,7 +19,6 @@ import {
 	EarlyShadersBadge,
 	ModeratorBadge,
 	PlusBadge,
-	PrideBadge,
 	StaffBadge,
 } from '@kael/assets'
 import {
@@ -203,31 +202,6 @@ const BADGES = [
 			message: defineMessage({
 				id: 'user.profile.badge.plus.link',
 				defaultMessage: `Click to learn more about how you can become a member.`,
-			}),
-		},
-	},
-	{
-		icon: PrideBadge,
-		name: defineMessage({
-			id: 'user.profile.badge.pride.name',
-			defaultMessage: 'Pride Fundraiser Supporter',
-		}),
-		about: [
-			defineMessage({
-				id: 'user.profile.badge.pride.about.1',
-				defaultMessage: `This user participated in at least one of Modrinth's Pride fundraisers for the LGBTQ+ community.`,
-			}),
-		],
-		criteria: [
-			{
-				type: 'pride',
-			},
-		],
-		link: {
-			href: 'https://modrinth.com/pride?from=badge',
-			message: defineMessage({
-				id: 'user.profile.badge.pride.link',
-				defaultMessage: `Click to visit our latest Pride fundraiser.`,
 			}),
 		},
 	},

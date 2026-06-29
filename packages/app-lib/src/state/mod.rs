@@ -55,8 +55,6 @@ mod mr_auth;
 
 pub use self::mr_auth::*;
 
-mod legacy_converter;
-
 pub mod attached_world_data;
 pub mod server_join_log;
 
@@ -168,8 +166,6 @@ impl State {
     ) -> crate::Result<Arc<Self>> {
         tracing::info!("Connecting to app database");
         let pool = db::connect(&app_identifier).await?;
-
-        legacy_converter::migrate_legacy_data(&pool).await?;
 
         tracing::info!("Fetching app settings");
         let mut settings = Settings::get(&pool).await?;
