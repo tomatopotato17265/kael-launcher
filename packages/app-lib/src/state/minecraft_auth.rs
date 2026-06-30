@@ -155,6 +155,7 @@ pub async fn login_finish(
         expires: oauth_token.date
             + Duration::seconds(oauth_token.value.expires_in as i64),
         active: true,
+        logged_in: Utc::now(),
     };
 
     // During login, we need to fetch the online profile at least once to get the
@@ -190,6 +191,9 @@ pub struct Credentials {
     pub refresh_token: String,
     pub expires: DateTime<Utc>,
     pub active: bool,
+    /// The instant when this account was logged in. Unlike [Self::expires], this
+    /// is set once at login and preserved across silent token refreshes.
+    pub logged_in: DateTime<Utc>,
 }
 
 /// An entry in the player profile cache, keyed by player UUID.
@@ -482,7 +486,7 @@ impl Credentials {
         let res = sqlx::query!(
             "
             SELECT
-                uuid, active, username, access_token, refresh_token, expires
+                uuid, active, username, access_token, refresh_token, expires, logged_in
             FROM minecraft_users
             WHERE active = TRUE
             "
@@ -505,6 +509,10 @@ impl Credentials {
                         .single()
                         .unwrap_or_else(Utc::now),
                     active: x.active == 1,
+                    logged_in: Utc
+                        .timestamp_opt(x.logged_in, 0)
+                        .single()
+                        .unwrap_or_else(Utc::now),
                 };
                 credentials.refresh(exec).await.ok();
                 Some(credentials)
@@ -519,7 +527,7 @@ impl Credentials {
         let res = sqlx::query!(
             "
             SELECT
-                uuid, active, username, access_token, refresh_token, expires
+                uuid, active, username, access_token, refresh_token, expires, logged_in
             FROM minecraft_users
             "
         )
@@ -539,6 +547,10 @@ impl Credentials {
                     .single()
                     .unwrap_or_else(Utc::now),
                 active: x.active == 1,
+                logged_in: Utc
+                    .timestamp_opt(x.logged_in, 0)
+                    .single()
+                    .unwrap_or_else(Utc::now),
             };
 
             async move {
@@ -559,6 +571,7 @@ impl Credentials {
     ) -> crate::Result<()> {
         let profile = self.maybe_online_profile().await;
         let expires = self.expires.timestamp();
+        let logged_in = self.logged_in.timestamp();
         let uuid = profile.id.as_hyphenated().to_string();
 
         if self.active {
@@ -572,10 +585,13 @@ impl Credentials {
             .await?;
         }
 
+        // `logged_in` is intentionally only set on insert and never touched in the
+        // conflict path, so silent token refreshes (and re-auth of an existing
+        // account) preserve the original login time.
         sqlx::query!(
             "
-            INSERT INTO minecraft_users (uuid, active, username, access_token, refresh_token, expires)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO minecraft_users (uuid, active, username, access_token, refresh_token, expires, logged_in)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (uuid) DO UPDATE SET
                 active = $2,
                 username = $3,
@@ -589,6 +605,7 @@ impl Credentials {
             self.access_token,
             self.refresh_token,
             expires,
+            logged_in,
         )
             .execute(exec)
             .await?;
@@ -645,12 +662,13 @@ impl Serialize for Credentials {
                 ),
         };
 
-        let mut ser = serializer.serialize_struct("Credentials", 5)?;
+        let mut ser = serializer.serialize_struct("Credentials", 6)?;
         ser.serialize_field("profile", &*profile)?;
         ser.serialize_field("access_token", &self.access_token)?;
         ser.serialize_field("refresh_token", &self.refresh_token)?;
         ser.serialize_field("expires", &self.expires)?;
         ser.serialize_field("active", &self.active)?;
+        ser.serialize_field("logged_in", &self.logged_in)?;
         ser.end()
     }
 }
