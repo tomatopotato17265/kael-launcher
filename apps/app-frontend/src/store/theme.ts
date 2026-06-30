@@ -25,7 +25,6 @@ export type ThemeStore = {
 	selectedTheme: ColorTheme
 	advancedRendering: boolean
 	hideNametagSkinsPage: boolean
-	toggleSidebar: boolean
 
 	devMode: boolean
 	featureFlags: FeatureFlags
@@ -37,7 +36,6 @@ export const DEFAULT_THEME_STORE: ThemeStore = {
 	selectedTheme: 'dark',
 	advancedRendering: true,
 	hideNametagSkinsPage: false,
-	toggleSidebar: false,
 
 	devMode: false,
 	featureFlags: DEFAULT_FEATURE_FLAGS,

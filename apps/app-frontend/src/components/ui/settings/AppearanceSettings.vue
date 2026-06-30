@@ -93,14 +93,6 @@ const messages = defineMessages({
 		id: 'app.appearance-settings.jump-back-into-worlds.description',
 		defaultMessage: 'Includes recent worlds in the "Jump back in" section on the Home page.',
 	},
-	toggleSidebarTitle: {
-		id: 'app.appearance-settings.toggle-sidebar.title',
-		defaultMessage: 'Toggle sidebar',
-	},
-	toggleSidebarDescription: {
-		id: 'app.appearance-settings.toggle-sidebar.description',
-		defaultMessage: 'Enables the ability to toggle the sidebar.',
-	},
 	unknownPackWarningTitle: {
 		id: 'app.appearance-settings.unknown-pack-warning.title',
 		defaultMessage: 'Warn me before installing unknown modpacks',
@@ -319,22 +311,4 @@ watch(
 		/>
 	</div>
 
-	<div class="mt-6 flex items-center justify-between">
-		<div>
-			<h2 class="m-0 text-lg font-semibold text-contrast">
-				{{ formatMessage(messages.toggleSidebarTitle) }}
-			</h2>
-			<p class="m-0 mt-1">{{ formatMessage(messages.toggleSidebarDescription) }}</p>
-		</div>
-		<Toggle
-			id="toggle-sidebar"
-			:model-value="settings.toggle_sidebar"
-			@update:model-value="
-				(e) => {
-					settings.toggle_sidebar = !!e
-					themeStore.toggleSidebar = settings.toggle_sidebar
-				}
-			"
-		/>
-	</div>
 </template>

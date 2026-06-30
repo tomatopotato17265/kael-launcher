@@ -16,13 +16,17 @@ const skipUnknownPackWarningFlag: FeatureFlag = 'skip_unknown_pack_warning'
 const showPlayTimeFlag: FeatureFlag = 'show_instance_play_time'
 
 const messages = defineMessages({
-	BlockbenchTitle: {
-		id: 'app.credits-settings.blockbench.title',
-		defaultMessage: 'Blockbench',
+	skinEditorTitle: {
+		id: 'app.credits-settings.skin-editor.title',
+		defaultMessage: 'Skin Editor',
 	},
-	BlockbenchDescription: {
-		id: 'app.credits-settings.blockbench.description',
-		defaultMessage: 'Blockbench is a 3D model editor that allows you to create and edit 3D models.',
+	skinEditorDescription: {
+		id: 'app.credits-settings.skin-editor.description',
+		defaultMessage: 'The in-app Minecraft skin editor, forked from Blockbench.',
+	},
+	blockbenchLink: {
+		id: 'app.credits-settings.skin-editor.blockbench-link',
+		defaultMessage: 'Blockbench',
 	},
 	editColorTitle: {
 		id: 'app.appearance-settings.brand-color.title',
@@ -93,14 +97,6 @@ const messages = defineMessages({
 		id: 'app.appearance-settings.jump-back-into-worlds.description',
 		defaultMessage: 'Includes recent worlds in the "Jump back in" section on the Home page.',
 	},
-	toggleSidebarTitle: {
-		id: 'app.appearance-settings.toggle-sidebar.title',
-		defaultMessage: 'Toggle sidebar',
-	},
-	toggleSidebarDescription: {
-		id: 'app.appearance-settings.toggle-sidebar.description',
-		defaultMessage: 'Enables the ability to toggle the sidebar.',
-	},
 	unknownPackWarningTitle: {
 		id: 'app.appearance-settings.unknown-pack-warning.title',
 		defaultMessage: 'Warn me before installing unknown modpacks',
@@ -133,5 +129,22 @@ watch(
 )
 </script>
 <template>
-	<div></div>
+	<div>
+		<div class="mt-6 flex items-center justify-between">
+			<div>
+				<h2 class="m-0 text-lg font-semibold text-contrast">
+					{{ formatMessage(messages.skinEditorTitle) }}
+				</h2>
+				<p class="m-0 mt-1">{{ formatMessage(messages.skinEditorDescription) }}</p>
+			</div>
+			<a
+				href="https://www.blockbench.net"
+				target="_blank"
+				rel="noopener noreferrer"
+				class="text-brand hover:underline shrink-0"
+			>
+				{{ formatMessage(messages.blockbenchLink) }}
+			</a>
+		</div>
+	</div>
 </template>

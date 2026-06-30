@@ -20,7 +20,6 @@ import {
 	NotepadTextIcon,
 	PlusIcon,
 	RefreshCwIcon,
-	RightArrowIcon,
 	ServerStackIcon,
 	SettingsIcon,
 	WorldIcon,
@@ -62,11 +61,9 @@ import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import ModrinthAppLogo from '@/assets/modrinth_app.svg?component'
-import AccountsCard from '@/components/ui/AccountsCard.vue'
 import AppActionBar from '@/components/ui/AppActionBar.vue'
 import Breadcrumbs from '@/components/ui/Breadcrumbs.vue'
 import ErrorModal from '@/components/ui/ErrorModal.vue'
-import FriendsList from '@/components/ui/friends/FriendsList.vue'
 import AddServerToInstanceModal from '@/components/ui/install_flow/AddServerToInstanceModal.vue'
 import UnknownPackWarningModal from '@/components/ui/install_flow/UnknownPackWarningModal.vue'
 import MinecraftAuthErrorModal from '@/components/ui/minecraft-auth-error-modal/MinecraftAuthErrorModal.vue'
@@ -146,15 +143,6 @@ router.afterEach((to, from) => {
 
 const discoverContentTo = computed(() => lastDiscoverRoute.value)
 const APP_LEFT_NAV_WIDTH = '4rem'
-const APP_SIDEBAR_WIDTH = 300
-const sidebarToggled = ref(true)
-const unsubscribeSidebarToggle = themeStore.$subscribe(() => {
-	sidebarToggled.value = !themeStore.toggleSidebar
-})
-const forceSidebar = computed(
-	() => route.path.startsWith('/browse') || route.path.startsWith('/project'),
-)
-const sidebarVisible = computed(() => sidebarToggled.value || forceSidebar.value)
 const hostingRouteActive = computed(() => route.path.startsWith('/hosting'))
 const minecraftUsers = ref([])
 const mcLoginDisabled = ref(false)
@@ -207,7 +195,7 @@ providePageContext({
 	showAds: ref(false),
 	floatingActionBarOffsets: {
 		left: ref(APP_LEFT_NAV_WIDTH),
-		right: computed(() => (sidebarVisible.value ? `${APP_SIDEBAR_WIDTH}px` : '0px')),
+		right: ref('0px'),
 	},
 	featureFlags: {
 		serverRamAsBytesAlwaysOn: computed(() =>
@@ -290,7 +278,6 @@ onMounted(async () => {
 onUnmounted(async () => {
 	document.querySelector('body').removeEventListener('click', handleClick)
 	document.querySelector('body').removeEventListener('auxclick', handleAuxClick)
-	unsubscribeSidebarToggle()
 	clearDelayedUpdatePopup()
 
 	await unlistenUpdateDownload?.()
@@ -330,7 +317,6 @@ async function setupApp() {
 		advanced_rendering,
 		onboarded,
 		default_page,
-		toggle_sidebar,
 		developer_mode,
 		feature_flags,
 		pending_update_toast_for_version,
@@ -359,7 +345,6 @@ async function setupApp() {
 	themeStore.collapsedNavigation = collapsed_navigation
 	themeStore.advancedRendering = advanced_rendering
 	themeStore.hideNametagSkinsPage = hide_nametag_skins_page
-	themeStore.toggleSidebar = toggle_sidebar
 	themeStore.devMode = developer_mode
 	themeStore.featureFlags = feature_flags
 	themeStore.applyBrandColor(brand_color ?? '#7f51f5')
@@ -457,13 +442,6 @@ let routerToken = null
 let suspenseToken = null
 
 let suspensePending = false
-
-const sidebarOverlayScrollbarsOptions = Object.freeze({
-	overflow: {
-		x: 'hidden',
-		y: 'scroll',
-	},
-})
 
 router.beforeEach(() => {
 	suspensePending = false
@@ -1343,19 +1321,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				<Breadcrumbs class="pt-[2px]" />
 			</div>
 			<section data-tauri-drag-region class="flex shrink-0 ml-auto items-center">
-				<ButtonStyled
-					v-if="!forceSidebar && themeStore.toggleSidebar"
-					:type="sidebarToggled ? 'standard' : 'transparent'"
-					circular
-				>
-					<button
-						class="mr-3 transition-transform"
-						:class="{ 'rotate-180': !sidebarToggled }"
-						@click="sidebarToggled = !sidebarToggled"
-					>
-						<RightArrowIcon />
-					</button>
-				</ButtonStyled>
 				<div class="flex mr-3">
 					<Suspense>
 						<AppActionBar />
@@ -1368,16 +1333,13 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 	<div
 		v-if="stateInitialized"
 		class="app-contents"
-		:class="{
-			'sidebar-enabled': sidebarVisible,
-			'disable-advanced-rendering': !themeStore.advancedRendering,
-		}"
+		:class="{ 'disable-advanced-rendering': !themeStore.advancedRendering }"
 	>
 		<div class="app-viewport flex-grow router-view">
 			<transition name="popup-survey">
 				<div
 					v-if="availableSurvey"
-					class="w-[400px] z-20 fixed -bottom-12 pb-16 right-[--right-bar-width] mr-4 rounded-t-2xl card-shadow bg-bg-raised border-surface-5 border-[1px] border-solid border-b-0 p-4"
+					class="w-[400px] z-20 fixed -bottom-12 pb-16 right-4 rounded-t-2xl card-shadow bg-bg-raised border-surface-5 border-[1px] border-solid border-b-0 p-4"
 				>
 					<h2 class="text-lg font-extrabold mt-0 mb-2">Hey there Modrinth user!</h2>
 					<p class="m-0 leading-tight">
@@ -1401,7 +1363,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				:style="{
 					top: 'calc(var(--top-bar-height))',
 					left: 'calc(var(--left-bar-width))',
-					width: 'calc(100% - var(--left-bar-width) - var(--right-bar-width))',
+					width: 'calc(100% - var(--left-bar-width))',
 				}"
 			>
 				<LoadingBar position="absolute" />
@@ -1415,9 +1377,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			<div
 				id="background-teleport-target"
 				class="absolute h-full -z-10 rounded-tl-[--radius-xl] overflow-hidden"
-				:style="{
-					width: 'calc(100% - var(--right-bar-width))',
-				}"
+				style="width: 100%"
 			></div>
 			<Admonition
 				v-if="criticalErrorMessage"
@@ -1446,34 +1406,10 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				</template>
 			</RouterView>
 		</div>
-		<div
-			class="app-sidebar mt-px shrink-0 flex flex-col border-0 border-l-[1px] border-[--brand-gradient-border] border-solid"
-		>
-			<div
-				v-overlay-scrollbars="sidebarOverlayScrollbarsOptions"
-				class="app-sidebar-scrollable flex-grow shrink relative"
-				data-overlayscrollbars-initialize
-			>
-				<div id="sidebar-teleport-target" class="sidebar-teleport-content"></div>
-				<div class="sidebar-default-content" :class="{ 'sidebar-enabled': sidebarVisible }">
-					<div class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid">
-						<h3 class="text-base text-primary font-medium m-0">Playing as</h3>
-						<suspense>
-							<AccountsCard ref="accounts" />
-						</suspense>
-					</div>
-					<div class="p-4 border-0 border-b-[1px] border-[--brand-gradient-border] border-solid">
-						<suspense>
-							<FriendsList />
-						</suspense>
-					</div>
-				</div>
-			</div>
-		</div>
 	</div>
 	<I18nDebugPanel />
-	<NotificationPanel :has-sidebar="sidebarVisible" />
-	<PopupNotificationPanel :has-sidebar="sidebarVisible" />
+	<NotificationPanel />
+	<PopupNotificationPanel />
 	<ErrorModal ref="errorModal" />
 	<MinecraftAuthErrorModal ref="minecraftAuthErrorModal" />
 	<ContentInstallModal
@@ -1528,7 +1464,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 .app-contents {
 	--top-bar-height: 3rem;
 	--left-bar-width: 4rem;
-	--right-bar-width: 300px;
+	--right-bar-width: 0px;
 }
 
 .app-grid-layout {
@@ -1571,12 +1507,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 	border-top-left-radius: var(--radius-xl);
 
 	display: grid;
-	grid-template-columns: 1fr 0px;
-	// transition: grid-template-columns 0.4s ease-in-out;
-
-	&.sidebar-enabled {
-		grid-template-columns: 1fr 300px;
-	}
+	grid-template-columns: 1fr;
 }
 
 .loading-indicator-container {
@@ -1584,39 +1515,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 	overflow: hidden;
 }
 
-.app-sidebar {
-	overflow: visible;
-	width: 300px;
-	position: relative;
-	height: calc(100vh - var(--top-bar-height));
-	background: var(--brand-gradient-bg);
-
-	--color-button-bg: var(--brand-gradient-button);
-	--color-button-bg-hover: var(--brand-gradient-border);
-	--color-divider: var(--brand-gradient-border);
-	--color-divider-dark: var(--brand-gradient-border);
-}
-
-.app-sidebar::after {
-	content: '';
-	position: absolute;
-	bottom: 250px;
-	left: 0;
-	right: 0;
-	height: 5rem;
-	background: var(--brand-gradient-fade-out-color);
-	pointer-events: none;
-}
-
-.app-sidebar.has-plus::after {
-	display: none;
-}
-
 .disable-advanced-rendering {
-	.app-sidebar::before {
-		box-shadow: none;
-	}
-
 	&.app-contents::before {
 		box-shadow: none;
 	}
@@ -1626,17 +1525,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 		box-shadow: none !important;
 		--tw-drop-shadow: none !important;
 	}
-}
-
-.app-sidebar::before {
-	content: '';
-	box-shadow: -15px 0 15px -15px rgba(0, 0, 0, 0.1) inset;
-	top: 0;
-	bottom: 0;
-	left: -2rem;
-	width: 2rem;
-	position: absolute;
-	pointer-events: none;
 }
 
 .app-viewport {
@@ -1661,18 +1549,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 	border-width: 1px;
 	border-style: solid;
 	pointer-events: none;
-}
-
-.sidebar-teleport-content {
-	display: contents;
-}
-
-.sidebar-default-content {
-	display: none;
-}
-
-.sidebar-teleport-content:empty + .sidebar-default-content.sidebar-enabled {
-	display: contents;
 }
 
 .popup-survey-enter-active {

@@ -1,49 +1,5 @@
 <template>
 	<div v-if="data">
-		<Teleport to="#sidebar-teleport-target">
-			<ProjectSidebarCompatibility
-				v-if="!isServerProject"
-				:project="data"
-				:tags="{ loaders: allLoaders, gameVersions: allGameVersions }"
-				:project-v3="projectV3"
-				class="project-sidebar-section"
-			/>
-			<ProjectSidebarServerInfo
-				v-if="isServerProject"
-				:project-v3="projectV3"
-				:tags="{ loaders: allLoaders, gameVersions: allGameVersions }"
-				:required-content="serverRequiredContent"
-				:recommended-version="serverRecommendedVersion"
-				:supported-versions="serverSupportedVersions"
-				:loaders="serverModpackLoaders"
-				:ping="serverPing"
-				:status-online="serverStatusOnline"
-				class="project-sidebar-section"
-			/>
-			<ProjectSidebarLinks
-				link-target="_blank"
-				:project="data"
-				:project-v3="projectV3"
-				class="project-sidebar-section"
-			/>
-			<ProjectSidebarTags :project="data" class="project-sidebar-section" />
-			<ProjectSidebarCreators
-				:organization="organization"
-				:members="members"
-				:org-link="(slug) => `https://modrinth.com/organization/${slug}`"
-				:user-link="(username) => `https://modrinth.com/user/${username}`"
-				link-target="_blank"
-				class="project-sidebar-section"
-			/>
-			<ProjectSidebarDetails
-				:project="data"
-				:has-versions="versions.length > 0"
-				:link-target="`_blank`"
-				:hide-license="isServerProject"
-				:show-followers="isServerProject"
-				class="project-sidebar-section"
-			/>
-		</Teleport>
 		<div class="flex flex-col gap-4 p-6">
 			<div
 				v-if="projectInstallContext"
@@ -276,12 +232,6 @@ import {
 	OverflowMenu,
 	ProjectBackgroundGradient,
 	ProjectHeader,
-	ProjectSidebarCompatibility,
-	ProjectSidebarCreators,
-	ProjectSidebarDetails,
-	ProjectSidebarLinks,
-	ProjectSidebarServerInfo,
-	ProjectSidebarTags,
 	requestInstall,
 	SelectedProjectsFloatingBar,
 	useVIntl,

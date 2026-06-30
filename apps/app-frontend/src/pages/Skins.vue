@@ -668,9 +668,7 @@ function schedulePendingSkinRefresh() {
 			return
 		}
 
-		if (accountsCard.value) {
-			await accountsCard.value.refreshValues()
-		}
+		await accountsCard.value?.refreshValues()
 
 		await loadCapes()
 		await loadSkins()
@@ -742,15 +740,15 @@ function getBakedSkinTextures(skin: Skin): RenderResult | undefined {
 }
 
 async function login() {
-	accountsCard.value.setLoginDisabled(true)
+	accountsCard.value?.setLoginDisabled(true)
 	const loggedIn = await login_flow().catch(handleSevereError)
 
-	if (loggedIn && accountsCard) {
-		await accountsCard.value.refreshValues()
+	if (loggedIn) {
+		await accountsCard.value?.refreshValues()
 	}
 
 	trackEvent('AccountLogIn')
-	accountsCard.value.setLoginDisabled(false)
+	accountsCard.value?.setLoginDisabled(false)
 }
 
 function openAddSkinFileBrowser() {
@@ -1116,9 +1114,9 @@ await loadSkins()
 				<p class="text-lg m-0">
 					{{ formatMessage(messages.signInDescription) }}
 				</p>
-				<ButtonStyled v-show="accountsCard" color="brand" :disabled="accountsCard.loginDisabled">
-					<button :disabled="accountsCard.loginDisabled" @click="login">
-						<LogInIcon v-if="!accountsCard.loginDisabled" />
+				<ButtonStyled v-show="accountsCard" color="brand" :disabled="accountsCard?.loginDisabled">
+					<button :disabled="accountsCard?.loginDisabled" @click="login">
+						<LogInIcon v-if="!accountsCard?.loginDisabled" />
 						<SpinnerIcon v-else class="animate-spin" />
 						{{ formatMessage(messages.signInButton) }}
 					</button>

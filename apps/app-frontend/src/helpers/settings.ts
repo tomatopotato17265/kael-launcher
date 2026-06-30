@@ -42,7 +42,6 @@ export type AppSettings = {
 	hide_nametag_skins_page: boolean
 	advanced_rendering: boolean
 	native_decorations: boolean
-	toggle_sidebar: boolean
 
 	telemetry: boolean
 	discord_rpc: boolean
