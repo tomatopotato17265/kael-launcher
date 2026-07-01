@@ -46,6 +46,18 @@ import {
 	get as getInstance,
 	get_installed_project_ids as getInstalledProjectIds,
 } from '@/helpers/profile.js'
+import {
+	CurseForgeSortField,
+	curseforge_get_files,
+	curseforge_install_file,
+	curseforge_install_modpack,
+	curseforge_is_enabled,
+	curseforge_search,
+	loaderToCurseForgeModLoaderType,
+	pickCurseForgeFileForInstance,
+	projectTypeToCurseForgeClassId,
+	type CurseForgeMod,
+} from '@/helpers/curseforge'
 import { get_categories, get_game_versions, get_loaders } from '@/helpers/tags'
 import { get_profile_worlds } from '@/helpers/worlds'
 import { injectContentInstall } from '@/providers/content-install'
@@ -673,6 +685,68 @@ async function chooseInstanceInstallVersion(
 	return { versionId: selectedVersion.id }
 }
 
+async function installCurseForgeResult(
+	projectResult: { project_id: string; project_type?: string; curseforge?: CurseForgeMod },
+) {
+	const mod = projectResult.curseforge
+	if (!mod) return
+
+	// Modpacks create a brand new profile instead of installing into an instance.
+	if (projectResult.project_type === 'modpack') {
+		setProjectInstalling(projectResult.project_id, true)
+		try {
+			const files = await curseforge_get_files(mod.id)
+			const file =
+				files
+					.filter((f) => f.isAvailable !== false)
+					.sort((a, b) => (b.fileDate ?? '').localeCompare(a.fileDate ?? ''))[0] ??
+				mod.latestFiles[0]
+			if (!file) {
+				handleError(new Error('No downloadable file was found for this modpack.'))
+				return
+			}
+			const profilePath = await curseforge_install_modpack(mod.id, file.id)
+			router.push(`/instance/${profilePath}`)
+		} catch (err) {
+			handleError(err as Error)
+		} finally {
+			setProjectInstalling(projectResult.project_id, false)
+		}
+		return
+	}
+
+	if (!instance.value) {
+		handleError(new Error('Open an instance to install CurseForge content into it.'))
+		return
+	}
+
+	setProjectInstalling(projectResult.project_id, true)
+	try {
+		const files = await curseforge_get_files(mod.id)
+		const file = pickCurseForgeFileForInstance(files, {
+			gameVersion: instance.value.game_version,
+			loader: instance.value.loader,
+		})
+
+		if (!file) {
+			handleError(new Error('No compatible CurseForge file was found for this instance.'))
+			return
+		}
+
+		await curseforge_install_file(
+			instance.value.path,
+			mod.id,
+			file.id,
+			projectResult.project_type,
+		)
+		onSearchResultsInstalled([projectResult.project_id])
+	} catch (err) {
+		handleError(err as Error)
+	} finally {
+		setProjectInstalling(projectResult.project_id, false)
+	}
+}
+
 function getCardActions(
 	result: Labrinth.Search.v2.ResultSearchProject | Labrinth.Search.v3.ResultSearchProject,
 	currentProjectType: string,
@@ -795,6 +869,16 @@ function getCardActions(
 			color: 'brand',
 			type: 'outlined',
 			onClick: async () => {
+				if ((projectResult as { curseforge?: CurseForgeMod }).curseforge) {
+					await installCurseForgeResult(
+						projectResult as unknown as {
+							project_id: string
+							project_type?: string
+							curseforge?: CurseForgeMod
+						},
+					)
+					return
+				}
 				setProjectInstalling(projectResult.project_id, true)
 				try {
 					const selectedInstall = instance.value
@@ -854,9 +938,107 @@ function onSearchResultsInstalled(ids: string[]) {
 	newlyInstalled.value = Array.from(new Set([...newlyInstalled.value, ...ids]))
 }
 
+const cfEnabled = ref(false)
+const contentSource = ref<'modrinth' | 'curseforge'>('modrinth')
+
+function mapCurseForgeMod(mod: CurseForgeMod) {
+	const categoryNames = mod.categories.map((c) => c.name)
+	return {
+		project_id: `cf-${mod.id}`,
+		project_type: projectType.value,
+		slug: mod.slug,
+		author: mod.authors[0]?.name ?? '',
+		title: mod.name,
+		description: mod.summary,
+		categories: categoryNames,
+		display_categories: categoryNames,
+		versions: [],
+		downloads: Math.round(mod.downloadCount),
+		follows: 0,
+		icon_url: mod.logo?.thumbnailUrl ?? mod.logo?.url ?? '',
+		date_created: mod.dateCreated ?? '',
+		date_modified: mod.dateModified ?? '',
+		latest_version: '',
+		license: '',
+		client_side: 'optional',
+		server_side: 'optional',
+		gallery: [],
+		featured_gallery: null,
+		color: null,
+		// Carry the raw CurseForge project so the install action can use it.
+		curseforge: mod,
+	} as unknown as Labrinth.Search.v2.ResultSearchProject & { installed?: boolean }
+}
+
+function modrinthSortToCurseForge(index: string | null): number {
+	switch (index) {
+		case 'downloads':
+			return CurseForgeSortField.TotalDownloads
+		case 'follows':
+			return CurseForgeSortField.Popularity
+		case 'newest':
+		case 'updated':
+			return CurseForgeSortField.LastUpdated
+		default:
+			return CurseForgeSortField.Popularity
+	}
+}
+
+async function searchCurseForge(requestParams: string) {
+	const params = new URLSearchParams(requestParams)
+	const pageSize = Number(params.get('limit') ?? 20)
+	const offset = Number(params.get('offset') ?? 0)
+	const newFilters = params.get('new_filters') ?? ''
+
+	const gameVersionMatch = newFilters.match(/game_versions:([^\s]+)/)
+	const gameVersion = gameVersionMatch
+		? gameVersionMatch[1].replace(/["']/g, '')
+		: undefined
+
+	let modLoaderType: number | undefined
+	for (const loader of loaders.value ?? []) {
+		if (newFilters.toLowerCase().includes(`categories:${loader.name.toLowerCase()}`)) {
+			const mapped = loaderToCurseForgeModLoaderType(loader.name)
+			if (mapped !== undefined) {
+				modLoaderType = mapped
+				break
+			}
+		}
+	}
+
+	const response = await curseforge_search({
+		classId: projectTypeToCurseForgeClassId(projectType.value),
+		searchFilter: params.get('query') || undefined,
+		gameVersion,
+		modLoaderType,
+		sortField: modrinthSortToCurseForge(params.get('index')),
+		index: offset,
+		pageSize,
+	}).catch((err) => {
+		handleError(err)
+		return null
+	})
+
+	if (!response) {
+		return { projectHits: [], serverHits: [], total_hits: 0, per_page: pageSize }
+	}
+
+	return {
+		projectHits: response.data.map(mapCurseForgeMod),
+		serverHits: [],
+		// CurseForge caps deep pagination at 10,000 results.
+		total_hits: Math.min(response.pagination.totalCount, 10_000),
+		per_page: response.pagination.pageSize,
+	}
+}
+
 async function search(requestParams: string) {
 	debugLog('searching v3', requestParams)
 	const isServer = projectType.value === 'server'
+
+	if (contentSource.value === 'curseforge' && !isServer) {
+		return await searchCurseForge(requestParams)
+	}
 
 	const rawResults = await queryClient.fetchQuery({
 		queryKey: ['search', 'v3', requestParams],
@@ -948,6 +1130,11 @@ const searchState = useBrowseSearch({
 	}),
 })
 
+watch(contentSource, () => {
+	searchState.currentPage.value = 1
+	void searchState.refreshSearch()
+})
+
 watch(
 	[
 		() => searchState.query.value,
@@ -989,6 +1176,14 @@ let isUnmounted = false
 let unlistenProfiles: UnlistenFn | null = null
 
 onMounted(() => {
+	curseforge_is_enabled()
+		.then((enabled) => {
+			cfEnabled.value = enabled
+		})
+		.catch((err) => {
+			debugLog('curseforge_is_enabled failed', err)
+		})
+
 	profile_listener(async (event: { event: string; profile_path_id: string }) => {
 		if (
 			instance.value &&
@@ -1080,6 +1275,32 @@ provideBrowseManager({
 
 <template>
 	<div class="flex flex-col gap-3 p-6">
+		<div
+			v-if="cfEnabled && !isServerContext && projectType !== 'server'"
+			class="flex items-center gap-2"
+		>
+			<span class="text-sm text-secondary">Source:</span>
+			<div class="flex overflow-hidden rounded-lg border border-solid border-surface-5">
+				<button
+					class="cursor-pointer border-0 px-3 py-1.5 text-sm"
+					:class="
+						contentSource === 'modrinth' ? 'bg-brand text-white' : 'bg-transparent text-primary'
+					"
+					@click="contentSource = 'modrinth'"
+				>
+					Modrinth
+				</button>
+				<button
+					class="cursor-pointer border-0 px-3 py-1.5 text-sm"
+					:class="
+						contentSource === 'curseforge' ? 'bg-brand text-white' : 'bg-transparent text-primary'
+					"
+					@click="contentSource = 'curseforge'"
+				>
+					CurseForge
+				</button>
+			</div>
+		</div>
 		<BrowsePageLayout>
 			<template #after>
 				<ContextMenu ref="contextMenuRef" @option-clicked="handleOptionsClick">

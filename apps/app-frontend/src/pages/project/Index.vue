@@ -111,7 +111,7 @@
 									},
 									{
 										id: 'open-in-browser',
-										link: `https://modrinth.com/${data.project_type}/${data.slug}`,
+										link: projectExternalUrl,
 										external: true,
 									},
 									{
@@ -122,6 +122,7 @@
 										color: 'red',
 										hoverFilled: true,
 										link: `https://modrinth.com/report?item=project&itemID=${data.id}`,
+										shown: !data.curseforge,
 									},
 								]"
 								aria-label="More options"
@@ -253,6 +254,17 @@ import {
 	get_version,
 	get_version_many,
 } from '@/helpers/cache.js'
+import {
+	curseForgeClassIdToProjectType,
+	curseforge_get_description,
+	curseforge_get_files,
+	curseforge_get_mod,
+	curseforge_install_file,
+	curseforge_install_modpack,
+	mapCurseForgeFilesToVersions,
+	mapCurseForgeModToProject,
+	pickCurseForgeFileForInstance,
+} from '@/helpers/curseforge'
 import { process_listener } from '@/helpers/events'
 import { get_loader_versions as getLoaderManifest } from '@/helpers/metadata'
 import { get_by_profile_path } from '@/helpers/process'
@@ -369,6 +381,14 @@ function buildBrowseHref(path) {
 	const qs = params.toString()
 	return qs ? `${path}?${qs}` : path
 }
+
+const projectExternalUrl = computed(() => {
+	if (!data.value) return ''
+	if (data.value.curseforge) {
+		return data.value.website_url ?? `https://www.curseforge.com/minecraft/${data.value.slug}`
+	}
+	return `https://modrinth.com/${data.value.project_type}/${data.value.slug}`
+})
 
 const projectDescriptionHref = computed(() => buildProjectHref(`/project/${route.params.id}`))
 const versionsHref = computed(() =>
@@ -502,7 +522,53 @@ function handleAddServerToInstance() {
 	showAddServerToInstanceModal(data.value.title, address)
 }
 
+async function fetchCurseForgeProjectData() {
+	const modId = Number(String(route.params.id).slice('cf-'.length))
+	if (!Number.isFinite(modId)) {
+		handleError('Error loading project')
+		return
+	}
+
+	const mod = await curseforge_get_mod(modId).catch(handleError)
+	if (!mod) {
+		handleError('Error loading project')
+		return
+	}
+
+	const [files, description] = await Promise.all([
+		curseforge_get_files(modId).catch(handleError),
+		curseforge_get_description(modId).catch(() => ''),
+	])
+	const modFiles = files ?? []
+
+	const projectType = curseForgeClassIdToProjectType(mod.classId)
+	const loaderNames = new Set((allLoaders.value ?? []).map((l) => l.name.toLowerCase()))
+
+	projectV3.value = null
+	members.value = []
+	categories.value = []
+	organization.value = null
+	isServerProject.value = false
+	data.value = mapCurseForgeModToProject(mod, {
+		projectType,
+		description: description ?? '',
+		files: modFiles,
+	})
+	versions.value = mapCurseForgeFilesToVersions(mod, modFiles, loaderNames)
+
+	if (route.query.i) {
+		instance.value = (await getInstance(route.query.i).catch(handleError)) ?? null
+	}
+
+	breadcrumbs.setName('Project', data.value.title)
+}
+
 async function fetchProjectData() {
+	if (String(route.params.id).startsWith('cf-')) {
+		await fetchCurseForgeProjectData()
+		return
+	}
+
 	const [project, projectV3Result] = await Promise.all([
 		get_project(route.params.id, 'must_revalidate').catch(handleError),
 		get_project_v3(route.params.id, 'must_revalidate').catch(handleError),
@@ -633,7 +699,70 @@ watch(
 	},
 )
 
+async function installCurseForge(fileId) {
+	const cf = data.value?.curseforge
+	if (!cf) return
+	const { mod, files } = cf
+
+	const findFile = () =>
+		fileId != null ? files.find((f) => String(f.id) === String(fileId)) : undefined
+
+	if (data.value.project_type === 'modpack') {
+		installing.value = true
+		try {
+			const file =
+				findFile() ??
+				[...files]
+					.filter((f) => f.isAvailable !== false)
+					.sort((a, b) => (b.fileDate ?? '').localeCompare(a.fileDate ?? ''))[0] ??
+				mod.latestFiles[0]
+			if (!file) {
+				handleError(new Error('No downloadable file was found for this modpack.'))
+				return
+			}
+			const profilePath = await curseforge_install_modpack(mod.id, file.id)
+			router.push(`/instance/${profilePath}`)
+		} catch (err) {
+			handleError(err)
+		} finally {
+			installing.value = false
+		}
+		return
+	}
+
+	if (!instance.value) {
+		handleError(new Error('Open an instance to install CurseForge content into it.'))
+		return
+	}
+
+	installing.value = true
+	try {
+		const file =
+			findFile() ??
+			pickCurseForgeFileForInstance(files, {
+				gameVersion: instance.value.game_version,
+				loader: instance.value.loader,
+			})
+		if (!file) {
+			handleError(new Error('No compatible CurseForge file was found for this instance.'))
+			return
+		}
+		await curseforge_install_file(instance.value.path, mod.id, file.id, data.value.project_type)
+		installed.value = true
+		installedVersion.value = String(file.id)
+	} catch (err) {
+		handleError(err)
+	} finally {
+		installing.value = false
+	}
+}
+
 async function install(version) {
+	if (data.value?.curseforge) {
+		await installCurseForge(version)
+		return
+	}
+
 	if (serverProjectInstallContext.value && data.value) {
 		if (serverProjectSelected.value) {
 			serverInstallContent.removeQueuedServerInstall(data.value.id)
@@ -727,12 +856,10 @@ const handleOptionsClick = (args) => {
 			install(null)
 			break
 		case 'open_link':
-			openUrl(`https://modrinth.com/${args.item.project_type}/${args.item.slug}`)
+			openUrl(projectExternalUrl.value)
 			break
 		case 'copy_link':
-			navigator.clipboard.writeText(
-				`https://modrinth.com/${args.item.project_type}/${args.item.slug}`,
-			)
+			navigator.clipboard.writeText(projectExternalUrl.value)
 			break
 	}
 }

@@ -109,6 +109,7 @@
 		"tags:default",
 		"utils:default",
 		"friends:default",
-		"worlds:default"
+		"worlds:default",
+		"curseforge:default"
 	]
 }

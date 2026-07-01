@@ -15,13 +15,13 @@
 	<Accordion
 		v-else
 		class="w-full mt-2 bg-button-bg border border-solid border-surface-5 rounded-xl overflow-clip"
-		button-class="button-base w-full bg-transparent px-3 py-2 border-0 cursor-pointer"
+		button-class="button-base w-full bg-transparent px-4 py-3 border-0 cursor-pointer"
 		:open-by-default="false"
 	>
 		<template #title>
-			<div class="flex gap-2 w-full min-w-0">
+			<div class="flex gap-3 w-full min-w-0">
 				<Avatar
-					size="36px"
+					size="48px"
 					:src="
 						selectedAccount
 							? avatarUrl
@@ -29,10 +29,10 @@
 					"
 				/>
 				<div class="flex flex-col items-start w-full min-w-0">
-					<span class="truncate w-full text-left">{{
+					<span class="truncate w-full text-left text-lg">{{
 						selectedAccount ? selectedAccount.profile.name : formatMessage(messages.selectAccount)
 					}}</span>
-					<span class="text-secondary text-xs">{{ formatMessage(messages.minecraftAccount) }}</span>
+					<span class="text-secondary text-sm">{{ formatMessage(messages.minecraftAccount) }}</span>
 				</div>
 			</div>
 		</template>
@@ -40,17 +40,17 @@
 			<template v-if="accounts.length > 0">
 				<div v-for="account in accounts" :key="account.profile.id" class="flex gap-1 items-center">
 					<button
-						class="flex items-center flex-shrink flex-grow overflow-clip gap-2 p-2 border-0 bg-transparent cursor-pointer button-base min-w-0"
+						class="flex items-center flex-shrink flex-grow overflow-clip gap-3 p-3 border-0 bg-transparent cursor-pointer button-base min-w-0"
 						@click="setAccount(account)"
 					>
 						<RadioButtonCheckedIcon
 							v-if="selectedAccount && selectedAccount.profile.id === account.profile.id"
-							class="w-5 h-5 text-brand shrink-0"
+							class="w-6 h-6 text-brand shrink-0"
 						/>
-						<RadioButtonIcon v-else class="w-5 h-5 text-secondary shrink-0" />
-						<Avatar :src="getAccountAvatarUrl(account)" size="24px" />
+						<RadioButtonIcon v-else class="w-6 h-6 text-secondary shrink-0" />
+						<Avatar :src="getAccountAvatarUrl(account)" size="32px" />
 						<p
-							class="m-0 truncate min-w-0"
+							class="m-0 truncate min-w-0 text-base"
 							:class="
 								selectedAccount && selectedAccount.profile.id === account.profile.id
 									? 'text-contrast font-semibold'

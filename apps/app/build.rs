@@ -316,6 +316,24 @@ fn main() {
                     ),
             )
             .plugin(
+                "curseforge",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "curseforge_is_enabled",
+                        "curseforge_search",
+                        "curseforge_get_mod",
+                        "curseforge_get_description",
+                        "curseforge_get_files",
+                        "curseforge_categories",
+                        "curseforge_minecraft_versions",
+                        "curseforge_install_file",
+                        "curseforge_install_modpack",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
                 "worlds",
                 InlinedPlugin::new()
                     .commands(&[

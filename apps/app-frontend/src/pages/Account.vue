@@ -6,8 +6,7 @@ import {
 	SkinPreviewRenderer,
 	useVIntl,
 } from '@kael/ui'
-import dayjs from 'dayjs'
-import { computed, inject, onMounted, onUnmounted, ref, useTemplateRef, watch } from 'vue'
+import { computed, inject, onUnmounted, ref, useTemplateRef, watch } from 'vue'
 import type { Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -59,43 +58,8 @@ const namemcUrl = computed(() =>
 	uuid.value ? `https://namemc.com/profile/${uuid.value}` : undefined,
 )
 
-const AGE_UNITS: { unit: dayjs.ManipulateType; label: string }[] = [
-	{ unit: 'year', label: 'years' },
-	{ unit: 'month', label: 'months' },
-	{ unit: 'week', label: 'weeks' },
-	{ unit: 'day', label: 'days' },
-	{ unit: 'hour', label: 'hours' },
-	{ unit: 'minute', label: 'minutes' },
-	{ unit: 'second', label: 'seconds' },
-]
-
-const now = ref(Date.now())
-let ageInterval: number | undefined
-
-const age = computed(() => {
-	const loggedIn = currentUser.value?.logged_in
-	if (!loggedIn) return undefined
-
-	let start = dayjs(loggedIn)
-	const end = dayjs(now.value)
-	if (!start.isValid() || end.isBefore(start)) return undefined
-
-	return AGE_UNITS.map(({ unit, label }) => {
-		const value = end.diff(start, unit)
-		start = start.add(value, unit)
-		return `${value} ${label}`
-	}).join(', ')
-})
-
-onMounted(() => {
-	ageInterval = window.setInterval(() => {
-		now.value = Date.now()
-	}, 1000)
-})
-
 onUnmounted(() => {
 	if (providedAccountsCard) providedAccountsCard.value = null
-	if (ageInterval !== undefined) window.clearInterval(ageInterval)
 })
 
 async function loadSkinTexture(skin: Skin) {
@@ -134,14 +98,6 @@ const messages = defineMessages({
 		id: 'app.account.edit-skin-button',
 		defaultMessage: 'Edit in Skin Selector',
 	},
-	ageTitle: {
-		id: 'app.account.stats.age.title',
-		defaultMessage: 'Age',
-	},
-	ageDescription: {
-		id: 'app.account.stats.age.description',
-		defaultMessage: 'How long this account has been logged in.',
-	},
 	uuidTitle: {
 		id: 'app.account.stats.uuid.title',
 		defaultMessage: 'UUID',
@@ -172,7 +128,7 @@ const messages = defineMessages({
 <template>
 	<div class="flex gap-8 box-border min-h-full p-6">
 		<div class="flex-1 min-w-0 flex flex-col gap-6">
-			<div class="w-72 shrink-0">
+			<div class="w-96 shrink-0">
 				<h3 class="text-base text-primary font-medium m-0">
 					{{ formatMessage(messages.playingAs) }}
 				</h3>
@@ -183,16 +139,6 @@ const messages = defineMessages({
 
 			<div v-if="currentUser">
 				<div class="flex items-center justify-between gap-4">
-					<div>
-						<h2 class="m-0 text-lg font-semibold text-contrast">
-							{{ formatMessage(messages.ageTitle) }}
-						</h2>
-						<p class="m-0 mt-1">{{ formatMessage(messages.ageDescription) }}</p>
-					</div>
-					<span class="text-right text-primary">{{ age }}</span>
-				</div>
-
-				<div class="mt-6 flex items-center justify-between gap-4">
 					<div>
 						<h2 class="m-0 text-lg font-semibold text-contrast">
 							{{ formatMessage(messages.uuidTitle) }}

@@ -5,6 +5,7 @@ use std::{env, fs};
 
 fn main() {
     println!("cargo::rerun-if-changed=.env");
+    println!("cargo::rerun-if-changed=.env.local");
     println!("cargo::rerun-if-changed=java/gradle");
     println!("cargo::rerun-if-changed=java/src");
     println!("cargo::rerun-if-changed=java/build.gradle.kts");
@@ -16,15 +17,21 @@ fn main() {
 }
 
 fn set_env() {
-    for (var_name, var_value) in
-        dotenvy::dotenv_iter().into_iter().flatten().flatten()
-    {
-        if var_name == "DATABASE_URL" {
-            // The sqlx database URL is a build-time detail that should not be exposed to the crate
+    // Load committed dev defaults first, then let the gitignored `.env`
+    // override them (the last cargo::rustc-env line for a var wins).
+    for filename in [".env.local", ".env"] {
+        let Ok(iter) = dotenvy::from_filename_iter(filename) else {
             continue;
-        }
+        };
 
-        println!("cargo::rustc-env={var_name}={var_value}");
+        for (var_name, var_value) in iter.flatten() {
+            if var_name == "DATABASE_URL" {
+                // The sqlx database URL is a build-time detail that should not be exposed to the crate
+                continue;
+            }
+
+            println!("cargo::rustc-env={var_name}={var_value}");
+        }
     }
 }
 

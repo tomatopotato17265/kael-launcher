@@ -231,6 +231,7 @@ fn main() {
 
     builder = builder
         .plugin(api::auth::init())
+        .plugin(api::curseforge::init())
         .plugin(api::hosting::init())
         .plugin(api::import::init())
         .plugin(api::logs::init())

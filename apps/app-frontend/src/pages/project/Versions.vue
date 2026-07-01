@@ -5,7 +5,11 @@
 			:game-versions="gameVersions"
 			:versions="versions"
 			:project="project"
-			:version-link="(version) => buildProjectHref(`/project/${project.id}/version/${version.id}`)"
+			:version-link="
+				project.curseforge
+					? undefined
+					: (version) => buildProjectHref(`/project/${project.id}/version/${version.id}`)
+			"
 		>
 			<template #actions="{ version }">
 				<ButtonStyled circular type="transparent">
