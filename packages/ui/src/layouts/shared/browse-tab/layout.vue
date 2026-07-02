@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Labrinth } from '@kael/api-client'
-import { SearchIcon } from '@kael/assets'
+import { FilterIcon, SearchIcon } from '@kael/assets'
 import { computed, ref, toValue } from 'vue'
 
 import ButtonStyled from '#ui/components/base/ButtonStyled.vue'
@@ -18,12 +18,22 @@ import { commonMessages, formatProjectTypeSentence } from '#ui/utils/common-mess
 import type { SortType } from '#ui/utils/search'
 
 import SelectedProjectsFloatingBar from './components/SelectedProjectsFloatingBar.vue'
+import FiltersModal from './FiltersModal.vue'
 import BrowseInstallHeader from './header.vue'
 import { injectBrowseManager } from './providers/browse-manager'
 
 const ctx = injectBrowseManager()
 const { formatMessage } = useVIntl()
 const lockedMessages = computed(() => toValue(ctx.lockedFilterMessages))
+
+const filtersModal = ref<InstanceType<typeof FiltersModal>>()
+const availableFilters = computed(() =>
+	ctx.filters.value.filter((filter) => filter.display !== 'none'),
+)
+const activeFilterCount = computed(() => {
+	const ids = new Set(availableFilters.value.map((filter) => filter.id))
+	return ctx.currentFilters.value.filter((filter) => ids.has(filter.type)).length
+})
 const stickyInstallHeaderRef = ref<HTMLElement | null>(null)
 const { isStuck: isInstallHeaderStuck } = useStickyObserver(
 	stickyInstallHeaderRef,
@@ -100,6 +110,19 @@ const messages = defineMessages({
 
 	<div class="flex flex-wrap items-center gap-2">
 		<slot name="toolbar-start" />
+		<ButtonStyled v-if="!ctx.isServerType.value && availableFilters.length > 0">
+			<button @click="filtersModal?.show()">
+				<FilterIcon aria-hidden="true" />
+				{{ formatMessage(commonMessages.filtersLabel) }}
+				<span
+					v-if="activeFilterCount > 0"
+					class="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1.5 text-xs font-bold text-brand-inverted"
+				>
+					{{ activeFilterCount }}
+				</span>
+			</button>
+		</ButtonStyled>
+		<FiltersModal v-if="!ctx.isServerType.value" ref="filtersModal" />
 		<Combobox
 			:model-value="ctx.effectiveCurrentSortType.value"
 			:options="sortOptions"

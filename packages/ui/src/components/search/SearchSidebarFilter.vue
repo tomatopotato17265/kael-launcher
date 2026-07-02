@@ -87,7 +87,7 @@
 							:key="`${filterType.id}-group-${groupName}`"
 							:group-name="groupName"
 							:options="options"
-							:supports-negative-filter="filterType.supports_negative_filter"
+							:supports-negative-filter="supportsNegativeFilter"
 							:included="isIncluded"
 							:excluded="isExcluded"
 							@toggle="toggleFilter"
@@ -101,7 +101,7 @@
 							:option="option"
 							:included="isIncluded(option)"
 							:excluded="isExcluded(option)"
-							:supports-negative-filter="filterType.supports_negative_filter"
+							:supports-negative-filter="supportsNegativeFilter"
 							:class="{
 								'mr-3': scrollable,
 							}"
@@ -205,11 +205,16 @@ const props = defineProps<{
 	innerPanelClass?: string
 	openByDefault?: boolean
 	providedFilters: FilterValue[]
+	hideExclude?: boolean
 }>()
 
 defineOptions({
 	inheritAttrs: false,
 })
+
+const supportsNegativeFilter = computed(
+	() => !props.hideExclude && props.filterType.supports_negative_filter,
+)
 
 const query = ref('')
 const showMore = ref(false)
