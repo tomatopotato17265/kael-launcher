@@ -99,6 +99,7 @@ const messages = defineMessages({
 	/>
 
 	<div class="flex flex-wrap items-center gap-2">
+		<slot name="toolbar-start" />
 		<Combobox
 			:model-value="ctx.effectiveCurrentSortType.value"
 			:options="sortOptions"
@@ -283,10 +284,27 @@ const messages = defineMessages({
 					@mouseenter="ctx.onProjectHover?.(result)"
 					@mouseleave="ctx.onProjectHoverEnd?.()"
 				>
-					<template v-if="ctx.getCardActions?.(result, ctx.projectType.value)?.length" #actions>
-						<div class="flex gap-2">
+					<template
+						v-if="
+							ctx.getCardActions?.(result, ctx.projectType.value)?.length ||
+							ctx.getResultBadge?.(result)
+						"
+						#actions
+					>
+						<div class="flex items-center gap-2">
+							<span
+								v-if="ctx.getResultBadge?.(result)"
+								class="inline-flex items-center text-nowrap rounded-full border border-solid px-2 py-1 text-sm font-normal leading-none"
+								:style="{
+									color: ctx.getResultBadge(result)!.color,
+									backgroundColor: `color-mix(in srgb, ${ctx.getResultBadge(result)!.color} 15%, transparent)`,
+									borderColor: `color-mix(in srgb, ${ctx.getResultBadge(result)!.color} 40%, transparent)`,
+								}"
+							>
+								{{ ctx.getResultBadge(result)!.label }}
+							</span>
 							<ButtonStyled
-								v-for="action in ctx.getCardActions(result, ctx.projectType.value)"
+								v-for="action in ctx.getCardActions?.(result, ctx.projectType.value) ?? []"
 								:key="action.key"
 								:color="action.color"
 								:type="action.type"

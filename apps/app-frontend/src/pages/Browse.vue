@@ -11,6 +11,7 @@ import {
 import type { BrowseInstallContentType, CardAction, ProjectType, Tags } from '@kael/ui'
 import {
 	BrowsePageLayout,
+	ButtonStyled,
 	commonMessages,
 	CreationFlowModal,
 	defineMessages,
@@ -134,6 +135,13 @@ const tags: Ref<Tags> = computed(() => ({
 	loaders: loaders.value ?? [],
 	categories: categories.value ?? [],
 }))
+
+type SortableHit = {
+	downloads?: number
+	follows?: number
+	date_created?: string
+	date_modified?: string
+}
 
 type Instance = {
 	game_version: string
@@ -939,13 +947,26 @@ function onSearchResultsInstalled(ids: string[]) {
 }
 
 const cfEnabled = ref(false)
-const contentSource = ref<'modrinth' | 'curseforge'>('modrinth')
+const sourceModrinth = ref(true)
+const sourceCurseforge = ref(false)
+const bothSourcesActive = computed(
+	() => cfEnabled.value && sourceModrinth.value && sourceCurseforge.value,
+)
+
+function toggleSource(source: 'modrinth' | 'curseforge') {
+	const on = source === 'modrinth' ? sourceModrinth : sourceCurseforge
+	const other = source === 'modrinth' ? sourceCurseforge : sourceModrinth
+	// Keep at least one source selected.
+	if (on.value && !other.value) return
+	on.value = !on.value
+}
 
 function mapCurseForgeMod(mod: CurseForgeMod) {
 	const categoryNames = mod.categories.map((c) => c.name)
 	return {
 		project_id: `cf-${mod.id}`,
 		project_type: projectType.value,
+		project_types: [projectType.value],
 		slug: mod.slug,
 		author: mod.authors[0]?.name ?? '',
 		title: mod.name,
@@ -1032,13 +1053,9 @@ async function searchCurseForge(requestParams: string) {
 	}
 }
 
-async function search(requestParams: string) {
+async function searchModrinth(requestParams: string) {
 	debugLog('searching v3', requestParams)
 	const isServer = projectType.value === 'server'
-
-	if (contentSource.value === 'curseforge' && !isServer) {
-		return await searchCurseForge(requestParams)
-	}
 
 	const rawResults = await queryClient.fetchQuery({
 		queryKey: ['search', 'v3', requestParams],
@@ -1096,6 +1113,97 @@ async function search(requestParams: string) {
 	}
 }
 
+async function search(requestParams: string) {
+	const isServer = projectType.value === 'server'
+	// Servers are Modrinth-only; CurseForge has no server listings.
+	const useCurseforge = cfEnabled.value && sourceCurseforge.value && !isServer
+	const useModrinth = sourceModrinth.value || isServer
+
+	if (useCurseforge && !useModrinth) {
+		return await searchCurseForge(requestParams)
+	}
+	if (useModrinth && !useCurseforge) {
+		return await searchModrinth(requestParams)
+	}
+
+	// Both sources active.
+	const params = new URLSearchParams(requestParams)
+	const limit = Number(params.get('limit') ?? 20)
+	const offset = Number(params.get('offset') ?? 0)
+	const sortName = params.get('index')
+	const withPaging = (l: number, o: number) => {
+		const p = new URLSearchParams(requestParams)
+		p.set('limit', String(l))
+		p.set('offset', String(o))
+		return `?${p.toString()}`
+	}
+
+	const toTime = (value?: string) => {
+		const time = value ? new Date(value).getTime() : 0
+		return Number.isNaN(time) ? 0 : time
+	}
+	const comparators: Record<string, (a: SortableHit, b: SortableHit) => number> = {
+		downloads: (a, b) => (b.downloads ?? 0) - (a.downloads ?? 0),
+		follows: (a, b) => (b.follows ?? 0) - (a.follows ?? 0),
+		newest: (a, b) => toTime(b.date_created) - toTime(a.date_created),
+		updated: (a, b) => toTime(b.date_modified) - toTime(a.date_modified),
+	}
+	let comparator = sortName ? comparators[sortName] : undefined
+
+	// Modrinth treats "relevance" with no search query as a downloads-ordered
+	// (popularity) sort. Mirror that when both sources are shown so CurseForge items
+	// rank by downloads against Modrinth ones. Relevance *with* a query is a real
+	// text-relevance score with no cross-source key, so it stays interleaved.
+	if (!comparator && !params.get('query')) {
+		comparator = comparators.downloads
+	}
+
+	// With no shared ranking key (relevance + query), split the page in half and
+	// interleave. For sortable fields, fetch each source's ranked list up to the end
+	// of the current page, then merge and sort globally so the highest-ranked items
+	// win regardless of source.
+	if (!comparator) {
+		const perSource = Math.ceil(limit / 2)
+		const page = limit ? Math.floor(offset / limit) : 0
+		const perOffset = page * perSource
+		const [modrinthResults, curseforgeResults] = await Promise.all([
+			searchModrinth(withPaging(perSource, perOffset)),
+			searchCurseForge(withPaging(perSource, perOffset)),
+		])
+		const merged = []
+		const maxLen = Math.max(
+			modrinthResults.projectHits.length,
+			curseforgeResults.projectHits.length,
+		)
+		for (let i = 0; i < maxLen; i++) {
+			if (i < modrinthResults.projectHits.length) merged.push(modrinthResults.projectHits[i])
+			if (i < curseforgeResults.projectHits.length)
+				merged.push(curseforgeResults.projectHits[i])
+		}
+		return {
+			projectHits: merged,
+			serverHits: [],
+			total_hits: modrinthResults.total_hits + curseforgeResults.total_hits,
+			per_page: limit,
+		}
+	}
+
+	const windowEnd = offset + limit
+	const [modrinthResults, curseforgeResults] = await Promise.all([
+		searchModrinth(withPaging(windowEnd, 0)),
+		searchCurseForge(withPaging(windowEnd, 0)),
+	])
+	const combined = [...modrinthResults.projectHits, ...curseforgeResults.projectHits].sort(
+		comparator,
+	)
+	return {
+		projectHits: combined.slice(offset, offset + limit),
+		serverHits: [],
+		total_hits: modrinthResults.total_hits + curseforgeResults.total_hits,
+		per_page: limit,
+	}
+}
+
 const isServerFilterContext = computed(() => isServerContext.value || isServerInstance.value)
 
 const lockedFilterMessages = computed(() => ({
@@ -1130,7 +1238,7 @@ const searchState = useBrowseSearch({
 	}),
 })
 
-watch(contentSource, () => {
+watch([sourceModrinth, sourceCurseforge], () => {
 	searchState.currentPage.value = 1
 	void searchState.refreshSearch()
 })
@@ -1234,6 +1342,12 @@ provideBrowseManager({
 	showProjectTypeTabs: computed(() => !isServerContext.value),
 	variant: 'app',
 	getCardActions,
+	getResultBadge: (result) => {
+		if (!bothSourcesActive.value) return undefined
+		return (result as { curseforge?: unknown }).curseforge
+			? { label: 'CurseForge', color: '#F16436' }
+			: { label: 'Modrinth', color: '#00dc48' }
+	},
 	installContext,
 	providedFilters: combinedProvidedFilters,
 	hideInstalled: computed({
@@ -1275,33 +1389,28 @@ provideBrowseManager({
 
 <template>
 	<div class="flex flex-col gap-3 p-6">
-		<div
-			v-if="cfEnabled && !isServerContext && projectType !== 'server'"
-			class="flex items-center gap-2"
-		>
-			<span class="text-sm text-secondary">Source:</span>
-			<div class="flex overflow-hidden rounded-lg border border-solid border-surface-5">
-				<button
-					class="cursor-pointer border-0 px-3 py-1.5 text-sm"
-					:class="
-						contentSource === 'modrinth' ? 'bg-brand text-white' : 'bg-transparent text-primary'
-					"
-					@click="contentSource = 'modrinth'"
-				>
-					Modrinth
-				</button>
-				<button
-					class="cursor-pointer border-0 px-3 py-1.5 text-sm"
-					:class="
-						contentSource === 'curseforge' ? 'bg-brand text-white' : 'bg-transparent text-primary'
-					"
-					@click="contentSource = 'curseforge'"
-				>
-					CurseForge
-				</button>
-			</div>
-		</div>
 		<BrowsePageLayout>
+			<template
+				v-if="cfEnabled && !isServerContext && projectType !== 'server'"
+				#toolbar-start
+			>
+				<div class="flex gap-1">
+					<ButtonStyled
+						:color="sourceModrinth ? 'green' : 'standard'"
+						:type="sourceModrinth ? 'standard' : 'transparent'"
+						:style="sourceModrinth ? '--color-green: #00dc48' : undefined"
+					>
+						<button @click="toggleSource('modrinth')">Modrinth</button>
+					</ButtonStyled>
+					<ButtonStyled
+						:color="sourceCurseforge ? 'orange' : 'standard'"
+						:type="sourceCurseforge ? 'standard' : 'transparent'"
+						:style="sourceCurseforge ? '--color-orange: #F16436' : undefined"
+					>
+						<button @click="toggleSource('curseforge')">CurseForge</button>
+					</ButtonStyled>
+				</div>
+			</template>
 			<template #after>
 				<ContextMenu ref="contextMenuRef" @option-clicked="handleOptionsClick">
 					<template #open_link>

@@ -61,6 +61,10 @@ export interface BrowseManagerContext {
 		projectType: string,
 	) => CardAction[]
 
+	getResultBadge?: (
+		result: Labrinth.Search.v2.ResultSearchProject | Labrinth.Search.v3.ResultSearchProject,
+	) => { label: string; color: string } | undefined
+
 	installContext?: ComputedRef<BrowseInstallContext | null>
 	providedFilters?: ComputedRef<FilterValue[]>
 	hideInstalled?: Ref<boolean>
