@@ -11,23 +11,38 @@ pub struct CloudflareConfig {
     pub domain: String,
 }
 
-/// Reads Cloudflare credentials from the environment. Returns `None` when
-/// they are absent, in which case custom domains are skipped entirely and
-/// servers keep their plain playit address.
-pub fn config_from_env() -> Option<CloudflareConfig> {
-    let token = std::env::var("CLOUDFLARE_API_TOKEN").ok()?;
-    let zone_id = std::env::var("CLOUDFLARE_ZONE_ID").ok()?;
+/// Reads a setting from the runtime environment, falling back to the value
+/// baked in at compile time from `packages/app-lib/.env` (see build.rs)
+fn setting(
+    runtime_name: &str,
+    compiled: Option<&'static str>,
+) -> Option<String> {
+    std::env::var(runtime_name)
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+        .or_else(|| {
+            compiled
+                .map(|v| v.trim().to_string())
+                .filter(|v| !v.is_empty())
+        })
+}
 
-    if token.trim().is_empty() || zone_id.trim().is_empty() {
-        return None;
-    }
+/// Reads Cloudflare credentials from the runtime environment or the values
+/// compiled in from `packages/app-lib/.env`. Returns `None` when they are
+/// absent, in which case custom domains are skipped entirely and servers
+/// keep their plain playit address.
+pub fn config_from_env() -> Option<CloudflareConfig> {
+    let token =
+        setting("CLOUDFLARE_API_TOKEN", option_env!("CLOUDFLARE_API_TOKEN"))?;
+    let zone_id =
+        setting("CLOUDFLARE_ZONE_ID", option_env!("CLOUDFLARE_ZONE_ID"))?;
 
     Some(CloudflareConfig {
-        token: token.trim().to_string(),
-        zone_id: zone_id.trim().to_string(),
-        domain: std::env::var("KAELMC_DOMAIN")
-            .ok()
-            .map(|d| d.trim().trim_matches('.').to_string())
+        token,
+        zone_id,
+        domain: setting("KAELMC_DOMAIN", option_env!("KAELMC_DOMAIN"))
+            .map(|d| d.trim_matches('.').to_string())
             .filter(|d| !d.is_empty())
             .unwrap_or_else(|| DEFAULT_DOMAIN.to_string()),
     })

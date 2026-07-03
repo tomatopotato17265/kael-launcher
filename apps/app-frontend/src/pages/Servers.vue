@@ -265,8 +265,10 @@ async function finishTunnel(id: string, token: number) {
 
 const sortedServers = computed(() => servers.value ?? [])
 
+// The kaelmc domain is the only public address the app ever shows; the raw
+// playit tunnel URL stays internal
 function primaryAddress(server: HostedServer): string | null {
-	return server.custom_domain ?? server.tunnel_url
+	return server.custom_domain
 }
 
 function localAddress(server: HostedServer): string {
@@ -307,13 +309,7 @@ function localAddress(server: HostedServer): string {
 							<span class="tunnel-url">{{ primaryAddress(server) }}</span>
 							<button class="link-button" @click="copy(primaryAddress(server)!)">Copy</button>
 						</div>
-						<div v-if="server.custom_domain && server.tunnel_url" class="tunnel secondary">
-							<span class="tunnel-url">{{ server.tunnel_url }}</span>
-							<button class="link-button" @click="copy(server.tunnel_url!)">Copy</button>
-						</div>
-						<div v-if="!primaryAddress(server)" class="tunnel muted">
-							No tunnel yet — activate to create one.
-						</div>
+						<div v-else class="tunnel muted">No address yet — activate to create one.</div>
 						<div class="tunnel secondary">
 							<span class="tunnel-label">This device:</span>
 							<span class="tunnel-url">{{ localAddress(server) }}</span>

@@ -346,8 +346,9 @@ pub async fn ensure_tunnel(id: &str) -> crate::Result<String> {
         }
     };
 
-    // Custom domains are strictly best-effort: a Cloudflare failure must
-    // never break the playit tunnel the server can already be joined on
+    // When Cloudflare is configured the kaelmc domain IS the server's
+    // address - the app never shows the raw playit URL - so failing to
+    // create it fails the whole start rather than silently degrading
     if server.custom_domain.is_none()
         && let Some(cfg) = cloudflare::config_from_env()
     {
@@ -356,20 +357,39 @@ pub async fn ensure_tunnel(id: &str) -> crate::Result<String> {
             None => (tunnel_url.as_str(), DEFAULT_PORT),
         };
 
-        match cloudflare::create_server_records(&cfg, &server.name, host, port)
+        let mut last_error = None;
+        for _ in 0..3 {
+            match cloudflare::create_server_records(
+                &cfg,
+                &server.name,
+                host,
+                port,
+            )
             .await
-        {
-            Ok((fqdn, ids)) => {
-                server.custom_domain = Some(fqdn);
-                server.cf_record_ids = serde_json::to_string(&ids).ok();
-                server.modified = Utc::now().timestamp();
-                server.upsert(&state.pool).await?;
+            {
+                Ok((fqdn, ids)) => {
+                    server.custom_domain = Some(fqdn);
+                    server.cf_record_ids = serde_json::to_string(&ids).ok();
+                    server.modified = Utc::now().timestamp();
+                    server.upsert(&state.pool).await?;
+                    last_error = None;
+                    break;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to create a custom domain for server {id}, retrying: {e}"
+                    );
+                    last_error = Some(e);
+                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                }
             }
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to create a custom domain for server {id}: {e}"
-                );
-            }
+        }
+
+        if let Some(e) = last_error {
+            return Err(crate::ErrorKind::OtherError(format!(
+                "Could not create the server's kaelmc.net address: {e}"
+            ))
+            .into());
         }
     }
 
@@ -565,9 +585,63 @@ pub async fn running_servers() -> crate::Result<Vec<String>> {
 
     // The UI polls this every few seconds, which makes it a natural spot to
     // heal a playit daemon that died or wedged while its server kept running
-    // (otherwise the server looks online in-app while its tunnel is dead)
-    for id in &ids {
-        if !state.hosting_manager.agent_needs_restart(id) {
+    // (otherwise the server looks online in-app while its tunnel is dead).
+    // Runs detached so the poll itself stays fast.
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static HEALING: AtomicBool = AtomicBool::new(false);
+
+        if !ids.is_empty() && !HEALING.swap(true, Ordering::SeqCst) {
+            let ids = ids.clone();
+            tokio::spawn(async move {
+                heal_daemons(&state, &ids).await;
+                HEALING.store(false, Ordering::SeqCst);
+            });
+        }
+    }
+
+    Ok(ids)
+}
+
+/// Consecutive tunnel-probe failures per server; a daemon is only declared
+/// wedged (and restarted) after several strikes so a transient playit blip
+/// doesn't trigger restarts
+static TUNNEL_STRIKES: std::sync::LazyLock<dashmap::DashMap<String, u32>> =
+    std::sync::LazyLock::new(dashmap::DashMap::new);
+const TUNNEL_STRIKE_LIMIT: u32 = 3;
+
+async fn heal_daemons(state: &State, ids: &[String]) {
+    for id in ids {
+        let daemon_exited = state.hosting_manager.agent_needs_restart(id);
+
+        let mut daemon_wedged = false;
+        if !daemon_exited
+            && let Ok(Some(server)) = HostedServer::get(id, &state.pool).await
+            && let Some(tunnel_url) = &server.tunnel_url
+            && let Some((host, port_str)) = tunnel_url.rsplit_once(':')
+            && let Ok(port) = port_str.parse::<u16>()
+        {
+            if minecraft_responds(host, port).await {
+                TUNNEL_STRIKES.remove(id);
+            } else if minecraft_responds("127.0.0.1", server.port).await {
+                // The server answers locally but not through the tunnel, so
+                // the daemon's forwarding is broken even though the process
+                // is still alive
+                let strikes = {
+                    let mut entry =
+                        TUNNEL_STRIKES.entry(id.clone()).or_insert(0);
+                    *entry += 1;
+                    *entry
+                };
+
+                if strikes >= TUNNEL_STRIKE_LIMIT {
+                    TUNNEL_STRIKES.remove(id);
+                    daemon_wedged = true;
+                }
+            }
+        }
+
+        if !daemon_exited && !daemon_wedged {
             continue;
         }
 
@@ -580,7 +654,7 @@ pub async fn running_servers() -> crate::Result<Vec<String>> {
                 })?;
             let daemon_path = agent::ensure_playit_daemon(None).await?;
             let secret_path =
-                write_secret_file(&state, &account.secret_key).await?;
+                write_secret_file(state, &account.secret_key).await?;
             let child = spawn_daemon(&daemon_path, &secret_path, id)?;
             crate::Result::Ok(child)
         };
@@ -588,7 +662,12 @@ pub async fn running_servers() -> crate::Result<Vec<String>> {
         match restart.await {
             Ok(child) => {
                 tracing::info!(
-                    "Restarted the playit daemon for server {id} (previous daemon had exited)"
+                    "Restarted the playit daemon for server {id} ({})",
+                    if daemon_exited {
+                        "previous daemon had exited"
+                    } else {
+                        "tunnel stopped forwarding while the server was still up"
+                    }
                 );
                 state.hosting_manager.replace_agent(id, child);
             }
@@ -599,8 +678,56 @@ pub async fn running_servers() -> crate::Result<Vec<String>> {
             }
         }
     }
+}
 
-    Ok(ids)
+/// Performs a real Minecraft status ping - TCP connect, handshake, status
+/// request, then waits for any response bytes. A bare TCP connect is not
+/// enough: playit's ingress accepts connections even when the agent behind
+/// them is dead, and only resets once data flows.
+async fn minecraft_responds(host: &str, port: u16) -> bool {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    fn write_varint(buf: &mut Vec<u8>, value: u32) {
+        let mut value = value;
+        loop {
+            let byte = (value & 0x7F) as u8;
+            value >>= 7;
+            if value == 0 {
+                buf.push(byte);
+                break;
+            }
+            buf.push(byte | 0x80);
+        }
+    }
+
+    let probe = async {
+        let mut stream =
+            tokio::net::TcpStream::connect((host, port)).await.ok()?;
+
+        let mut handshake = vec![0x00];
+        write_varint(&mut handshake, 0);
+        write_varint(&mut handshake, host.len() as u32);
+        handshake.extend_from_slice(host.as_bytes());
+        handshake.extend_from_slice(&port.to_be_bytes());
+        write_varint(&mut handshake, 1);
+
+        let mut packet = Vec::new();
+        write_varint(&mut packet, handshake.len() as u32);
+        packet.extend_from_slice(&handshake);
+        packet.extend_from_slice(&[0x01, 0x00]);
+
+        stream.write_all(&packet).await.ok()?;
+
+        let mut buf = [0u8; 1];
+        let read = stream.read(&mut buf).await.ok()?;
+        (read > 0).then_some(())
+    };
+
+    tokio::time::timeout(std::time::Duration::from_secs(4), probe)
+        .await
+        .ok()
+        .flatten()
+        .is_some()
 }
 
 pub async fn get_logs(id: String) -> crate::Result<Vec<String>> {
