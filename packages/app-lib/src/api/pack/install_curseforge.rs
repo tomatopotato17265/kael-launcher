@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use serde::Deserialize;
 
 use crate::State;
-use crate::state::{ModLoader, ProfileInstallStage, Profile};
+use crate::state::{ModLoader, Profile, ProfileInstallStage};
 use crate::util::fetch;
 
 const SHA1_ALGO: i64 = 1;
@@ -57,8 +57,10 @@ fn parse_loader(manifest: &CfManifest) -> (ModLoader, Option<String>) {
         return (ModLoader::Vanilla, None);
     };
 
-    let (name, version) =
-        chosen.id.split_once('-').unwrap_or((chosen.id.as_str(), ""));
+    let (name, version) = chosen
+        .id
+        .split_once('-')
+        .unwrap_or((chosen.id.as_str(), ""));
     let loader = match name.to_lowercase().as_str() {
         "forge" => ModLoader::Forge,
         "fabric" => ModLoader::Fabric,
@@ -66,8 +68,7 @@ fn parse_loader(manifest: &CfManifest) -> (ModLoader, Option<String>) {
         "neoforge" => ModLoader::NeoForge,
         _ => ModLoader::Vanilla,
     };
-    let version =
-        (!version.is_empty()).then(|| version.to_string());
+    let version = (!version.is_empty()).then(|| version.to_string());
     (loader, version)
 }
 
@@ -103,7 +104,8 @@ fn extract_overrides_blocking(
         .as_error()
     })?;
 
-    let prefixes = [format!("{overrides_dir}/"), "client-overrides/".to_string()];
+    let prefixes =
+        [format!("{overrides_dir}/"), "client-overrides/".to_string()];
 
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| {
@@ -215,9 +217,13 @@ pub async fn install_curseforge_modpack(
     )
     .await?;
 
-    let result =
-        install_modpack_contents(&state, &profile_path, &manifest, archive_bytes)
-            .await;
+    let result = install_modpack_contents(
+        &state,
+        &profile_path,
+        &manifest,
+        archive_bytes,
+    )
+    .await;
 
     if let Err(err) = result {
         let _ = crate::api::profile::remove(&profile_path).await;
@@ -290,8 +296,10 @@ async fn install_modpack_contents(
     }
 
     let dest = state.directories.profiles_dir().join(profile_path);
-    let overrides_dir =
-        manifest.overrides.clone().unwrap_or_else(|| "overrides".to_string());
+    let overrides_dir = manifest
+        .overrides
+        .clone()
+        .unwrap_or_else(|| "overrides".to_string());
     {
         let bytes = archive_bytes.clone();
         tokio::task::spawn_blocking(move || {

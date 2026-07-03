@@ -14,6 +14,7 @@ pub fn init<R: tauri::Runtime>() -> TauriPlugin<R> {
             hosting_server_status,
             hosting_running_servers,
             hosting_get_logs,
+            hosting_send_command,
             hosting_ensure_tunnel,
             hosting_playit_has_account,
             hosting_playit_begin_claim,
@@ -67,6 +68,12 @@ pub async fn hosting_running_servers() -> Result<Vec<String>> {
 #[tauri::command]
 pub async fn hosting_get_logs(id: String) -> Result<Vec<String>> {
     Ok(hosting::get_logs(id).await?)
+}
+
+#[tauri::command]
+pub async fn hosting_send_command(id: String, command: String) -> Result<()> {
+    hosting::send_command(id, command).await?;
+    Ok(())
 }
 
 #[tauri::command]

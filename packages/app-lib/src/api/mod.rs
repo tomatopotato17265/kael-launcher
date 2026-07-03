@@ -24,10 +24,10 @@ pub mod data {
         ContentItemProject, ContentItemVersion, Credentials, Dependency,
         DirectoryInfo, Hooks, HostedServer, JavaVersion, LinkedData,
         LinkedModpackInfo, MemorySettings, ModLoader, ModrinthCredentials,
-        Organization, PlayitAccount,
-        OwnerType, ProcessMetadata, ProfileFile, Project, ProjectType,
-        ProjectV3, SearchResult, SearchResults, SearchResultsV3, Settings,
-        TeamMember, Theme, User, UserFriend, Version, WindowSize,
+        Organization, OwnerType, PlayitAccount, ProcessMetadata, ProfileFile,
+        Project, ProjectType, ProjectV3, SearchResult, SearchResults,
+        SearchResultsV3, Settings, TeamMember, Theme, User, UserFriend,
+        Version, WindowSize,
     };
     pub use ariadne::users::UserStatus;
 }

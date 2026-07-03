@@ -60,8 +60,8 @@ pub async fn curseforge_categories(
 
 /// Fetch the Minecraft game versions known to CurseForge.
 #[tauri::command]
-pub async fn curseforge_minecraft_versions()
--> Result<Vec<MinecraftGameVersion>> {
+pub async fn curseforge_minecraft_versions() -> Result<Vec<MinecraftGameVersion>>
+{
     Ok(theseus::curseforge::minecraft_versions().await?)
 }
 
@@ -88,8 +88,10 @@ pub async fn curseforge_install_modpack(
     mod_id: i64,
     file_id: i64,
 ) -> Result<String> {
-    Ok(theseus::pack::install_curseforge::install_curseforge_modpack(
-        mod_id, file_id,
+    Ok(
+        theseus::pack::install_curseforge::install_curseforge_modpack(
+            mod_id, file_id,
+        )
+        .await?,
     )
-    .await?)
 }

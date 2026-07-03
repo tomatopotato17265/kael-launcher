@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { computed, onUnmounted, reactive, ref } from 'vue'
 
+import ServerConsole from '@/components/ui/ServerConsole.vue'
 import { loading_listener } from '@/helpers/events.js'
 import {
 	createServer,
@@ -48,7 +49,18 @@ async function activate(server: HostedServer) {
 	try {
 		await startServer(server.id)
 	} catch (error) {
-		handleError(error)
+		let agentGone = false
+		try {
+			agentGone = !(await playitHasAccount())
+		} catch {
+			// If the check itself fails, fall through to the normal error
+		}
+
+		if (agentGone) {
+			openReclaim()
+		} else {
+			handleError(error)
+		}
 	} finally {
 		busy[server.id] = false
 		invalidate()
@@ -97,13 +109,18 @@ interface LoadingEvent {
 }
 
 function messageOf(error: unknown): string {
-	return error instanceof Error ? error.message : String(error)
+	if (error instanceof Error) return error.message
+	if (error && typeof error === 'object' && 'message' in error) {
+		return String((error as { message: unknown }).message)
+	}
+	return String(error)
 }
 
 type Step = 'name' | 'creating' | 'playit' | 'tunnel' | 'done' | 'error'
 
 const wizardOpen = ref(false)
 const step = ref<Step>('name')
+const reclaiming = ref(false)
 const newName = ref('')
 const progress = ref(0)
 const progressMessage = ref('')
@@ -112,6 +129,7 @@ const claimStatus = ref('')
 const resultUrl = ref('')
 const errorMessage = ref('')
 const createdId = ref('')
+const createdPort = ref(25565)
 let flowToken = 0
 
 let unlistenLoading: (() => void) | undefined
@@ -130,8 +148,20 @@ onUnmounted(() => {
 	unlistenLoading?.()
 })
 
+function openReclaim() {
+	flowToken += 1
+	reclaiming.value = true
+	step.value = 'playit'
+	claimUrl.value = ''
+	claimStatus.value = ''
+	errorMessage.value = ''
+	createdId.value = ''
+	wizardOpen.value = true
+}
+
 function openWizard() {
 	flowToken += 1
+	reclaiming.value = false
 	step.value = 'name'
 	newName.value = ''
 	progress.value = 0
@@ -141,12 +171,14 @@ function openWizard() {
 	resultUrl.value = ''
 	errorMessage.value = ''
 	createdId.value = ''
+	createdPort.value = 25565
 	wizardOpen.value = true
 }
 
 function closeWizard() {
 	flowToken += 1
 	wizardOpen.value = false
+	reclaiming.value = false
 	invalidate()
 }
 
@@ -165,6 +197,7 @@ async function beginCreate() {
 		const server = await createServer(name)
 		if (token !== flowToken) return
 		createdId.value = server.id
+		createdPort.value = server.port
 		invalidate()
 
 		const hasAccount = await playitHasAccount()
@@ -196,7 +229,11 @@ async function setupPlayit(guest: boolean) {
 			if (token !== flowToken) return
 
 			if (poll.secret) {
-				if (createdId.value) await finishTunnel(createdId.value, token)
+				if (createdId.value) {
+					await finishTunnel(createdId.value, token)
+				} else {
+					closeWizard()
+				}
 				return
 			}
 
@@ -227,6 +264,14 @@ async function finishTunnel(id: string, token: number) {
 }
 
 const sortedServers = computed(() => servers.value ?? [])
+
+function primaryAddress(server: HostedServer): string | null {
+	return server.custom_domain ?? server.tunnel_url
+}
+
+function localAddress(server: HostedServer): string {
+	return `localhost:${server.port}`
+}
 </script>
 
 <template>
@@ -251,31 +296,49 @@ const sortedServers = computed(() => servers.value ?? [])
 
 		<ul v-else class="server-list">
 			<li v-for="server in sortedServers" :key="server.id" class="server-card">
-				<div class="server-info">
-					<div class="server-title">
-						<span class="status-dot" :class="{ online: isRunning(server.id) }" />
-						<span class="name">{{ server.name }}</span>
-						<span class="version">{{ server.mc_version }}</span>
+				<div class="server-row">
+					<div class="server-info">
+						<div class="server-title">
+							<span class="status-dot" :class="{ online: isRunning(server.id) }" />
+							<span class="name">{{ server.name }}</span>
+							<span class="version">{{ server.mc_version }}</span>
+						</div>
+						<div v-if="primaryAddress(server)" class="tunnel">
+							<span class="tunnel-url">{{ primaryAddress(server) }}</span>
+							<button class="link-button" @click="copy(primaryAddress(server)!)">Copy</button>
+						</div>
+						<div v-if="server.custom_domain && server.tunnel_url" class="tunnel secondary">
+							<span class="tunnel-url">{{ server.tunnel_url }}</span>
+							<button class="link-button" @click="copy(server.tunnel_url!)">Copy</button>
+						</div>
+						<div v-if="!primaryAddress(server)" class="tunnel muted">
+							No tunnel yet — activate to create one.
+						</div>
+						<div class="tunnel secondary">
+							<span class="tunnel-label">This device:</span>
+							<span class="tunnel-url">{{ localAddress(server) }}</span>
+							<button class="link-button" @click="copy(localAddress(server))">Copy</button>
+						</div>
 					</div>
-					<div v-if="server.tunnel_url" class="tunnel">
-						<span class="tunnel-url">{{ server.tunnel_url }}</span>
-						<button class="link-button" @click="copy(server.tunnel_url!)">Copy</button>
+					<div class="server-actions">
+						<ButtonStyled v-if="!isRunning(server.id)" color="green">
+							<button :disabled="busy[server.id]" @click="activate(server)">
+								{{ busy[server.id] ? 'Starting…' : 'Activate' }}
+							</button>
+						</ButtonStyled>
+						<ButtonStyled v-else color="red">
+							<button :disabled="busy[server.id]" @click="stop(server)">Stop</button>
+						</ButtonStyled>
+						<ButtonStyled color="red">
+							<button :disabled="busy[server.id]" @click="destroy(server)">Delete</button>
+						</ButtonStyled>
 					</div>
-					<div v-else class="tunnel muted">No tunnel yet — activate to create one.</div>
 				</div>
-				<div class="server-actions">
-					<ButtonStyled v-if="!isRunning(server.id)" color="green">
-						<button :disabled="busy[server.id]" @click="activate(server)">
-							{{ busy[server.id] ? 'Starting…' : 'Activate' }}
-						</button>
-					</ButtonStyled>
-					<ButtonStyled v-else color="red">
-						<button :disabled="busy[server.id]" @click="stop(server)">Stop</button>
-					</ButtonStyled>
-					<ButtonStyled color="red">
-						<button :disabled="busy[server.id]" @click="destroy(server)">Delete</button>
-					</ButtonStyled>
-				</div>
+				<ServerConsole
+					v-if="isRunning(server.id)"
+					:server-id="server.id"
+					:running="isRunning(server.id)"
+				/>
 			</li>
 		</ul>
 
@@ -309,8 +372,13 @@ const sortedServers = computed(() => servers.value ?? [])
 				</template>
 
 				<template v-else-if="step === 'playit'">
-					<h2>Connect playit.gg</h2>
-					<p>
+					<h2>{{ reclaiming ? 'playit agent missing' : 'Connect playit.gg' }}</h2>
+					<p v-if="reclaiming" class="error-text">
+						Your playit agent no longer exists — it looks like it was deleted from the playit.gg
+						web portal. Your servers cannot start until you recreate it. Old tunnel addresses are
+						gone; new ones will be created the next time each server starts.
+					</p>
+					<p v-else>
 						playit.gg exposes your server to the internet. Pick how to set it up — a one-time
 						browser approval is required either way.
 					</p>
@@ -347,6 +415,11 @@ const sortedServers = computed(() => servers.value ?? [])
 					<div class="result-url">
 						<span>{{ resultUrl }}</span>
 						<button class="link-button" @click="copy(resultUrl)">Copy</button>
+					</div>
+					<p>Playing on this device? Add it to an Instance with this address instead:</p>
+					<div class="result-url">
+						<span>localhost:{{ createdPort }}</span>
+						<button class="link-button" @click="copy(`localhost:${createdPort}`)">Copy</button>
 					</div>
 					<div class="wizard-actions">
 						<ButtonStyled color="brand">
@@ -413,12 +486,18 @@ const sortedServers = computed(() => servers.value ?? [])
 
 .server-card {
 	display: flex;
-	align-items: center;
-	justify-content: space-between;
+	flex-direction: column;
 	gap: var(--gap-md);
 	padding: var(--gap-md);
 	background: var(--color-raised-bg);
 	border-radius: var(--radius-md);
+}
+
+.server-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: var(--gap-md);
 }
 
 .server-info {
@@ -464,6 +543,15 @@ const sortedServers = computed(() => servers.value ?? [])
 		color: var(--color-secondary);
 		font-family: inherit;
 	}
+
+	&.secondary {
+		color: var(--color-secondary);
+		font-size: var(--font-size-sm);
+	}
+}
+
+.tunnel-label {
+	color: var(--color-secondary);
 }
 
 .server-actions {

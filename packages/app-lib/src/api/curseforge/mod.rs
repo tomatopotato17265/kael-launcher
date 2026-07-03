@@ -48,7 +48,8 @@ pub fn is_enabled() -> bool {
 fn require_key() -> crate::Result<&'static str> {
     cf_api_key().ok_or_else(|| {
         ErrorKind::OtherError(
-            "CurseForge integration is not available in this build.".to_string(),
+            "CurseForge integration is not available in this build."
+                .to_string(),
         )
         .as_error()
     })
@@ -269,10 +270,8 @@ pub async fn search(params: SearchParams) -> crate::Result<SearchResponse> {
         params.page_size.unwrap_or(20).clamp(1, 50).to_string(),
     ));
 
-    let url = Url::parse_with_params(
-        &format!("{API_BASE}/v1/mods/search"),
-        &query,
-    )?;
+    let url =
+        Url::parse_with_params(&format!("{API_BASE}/v1/mods/search"), &query)?;
     cf_request(Method::GET, url, None).await
 }
 
@@ -287,8 +286,7 @@ pub async fn get_mod(mod_id: i64) -> crate::Result<CurseForgeMod> {
 /// Fetch the rendered HTML description for a CurseForge mod.
 pub async fn get_description(mod_id: i64) -> crate::Result<String> {
     let url = Url::parse(&format!("{API_BASE}/v1/mods/{mod_id}/description"))?;
-    let res: DataResponse<String> =
-        cf_request(Method::GET, url, None).await?;
+    let res: DataResponse<String> = cf_request(Method::GET, url, None).await?;
     Ok(res.data)
 }
 
@@ -327,9 +325,7 @@ pub async fn get_download_url(
 }
 
 /// Fetch CurseForge categories for Minecraft, optionally scoped to a class.
-pub async fn categories(
-    class_id: Option<i64>,
-) -> crate::Result<Vec<Category>> {
+pub async fn categories(class_id: Option<i64>) -> crate::Result<Vec<Category>> {
     let game_id = MINECRAFT_GAME_ID.to_string();
     let mut query: Vec<(&str, String)> = vec![("gameId", game_id)];
     if let Some(class_id) = class_id {

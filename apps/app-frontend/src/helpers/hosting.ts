@@ -9,6 +9,8 @@ export interface HostedServer {
 	port: number
 	playit_tunnel_id: string | null
 	tunnel_url: string | null
+	custom_domain: string | null
+	cf_record_ids: string | null
 	created: number
 	modified: number
 }
@@ -53,6 +55,10 @@ export async function runningServers(): Promise<string[]> {
 
 export async function getLogs(id: string): Promise<string[]> {
 	return await invoke('plugin:hosting|hosting_get_logs', { id })
+}
+
+export async function sendCommand(id: string, command: string): Promise<void> {
+	return await invoke('plugin:hosting|hosting_send_command', { id, command })
 }
 
 export async function ensureTunnel(id: string): Promise<string> {

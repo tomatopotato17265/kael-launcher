@@ -3,7 +3,7 @@
 
 use crate::ErrorKind;
 use crate::event::{ProfilePayloadType, emit::emit_profile};
-use crate::state::{ProjectType, Profile};
+use crate::state::{Profile, ProjectType};
 use crate::util::fetch;
 
 const SHA1_ALGO: i64 = 1;
@@ -30,10 +30,8 @@ pub async fn install_cf_file(
     project_type: Option<String>,
 ) -> crate::Result<String> {
     let files = super::get_files_bulk(&[file_id]).await?;
-    let file = files
-        .into_iter()
-        .find(|f| f.id == file_id)
-        .ok_or_else(|| {
+    let file =
+        files.into_iter().find(|f| f.id == file_id).ok_or_else(|| {
             ErrorKind::InputError(format!(
                 "CurseForge file {file_id} was not found."
             ))

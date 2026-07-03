@@ -272,14 +272,18 @@ fn main() {
                 #[cfg(not(any(feature = "updater", target_os = "macos")))]
                 let _ = app;
 
-                if matches!(&event, tauri::RunEvent::ExitRequested { .. })
-                    && let Err(error) = tauri::async_runtime::block_on(
-                        theseus::minecraft_skins::flush_pending_skin_change(),
-                    )
-                {
-                    tracing::warn!(
-                        "Failed to flush pending Minecraft skin change before exit: {error}"
+                if matches!(&event, tauri::RunEvent::ExitRequested { .. }) {
+                    tauri::async_runtime::block_on(
+                        theseus::hosting::shutdown(),
                     );
+
+                    if let Err(error) = tauri::async_runtime::block_on(
+                        theseus::minecraft_skins::flush_pending_skin_change(),
+                    ) {
+                        tracing::warn!(
+                            "Failed to flush pending Minecraft skin change before exit: {error}"
+                        );
+                    }
                 }
 
                 #[cfg(feature = "updater")]

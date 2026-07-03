@@ -3,6 +3,9 @@ use serde::de::DeserializeOwned;
 use serde_json::json;
 
 const API_BASE: &str = "https://api.playit.gg";
+// Reported to playit's claim API so it doesn't reject us as an outdated
+// agent; keep this in sync with `PLAYIT_AGENT_TAG` in agent.rs
+const AGENT_VERSION: &str = "playit 1.0.10";
 
 #[derive(serde::Deserialize)]
 #[serde(tag = "status", content = "data")]
@@ -62,9 +65,12 @@ pub struct ClaimPoll {
     pub secret: Option<String>,
 }
 
+pub const AGENT_NAME: &str = "Kael Launcher";
+
 pub fn begin_claim() -> ClaimInfo {
-    let code: String =
-        (0..5).map(|_| format!("{:02x}", rand::random::<u8>())).collect();
+    let code: String = (0..5)
+        .map(|_| format!("{:02x}", rand::random::<u8>()))
+        .collect();
     let url = format!("https://playit.gg/claim/{code}");
     ClaimInfo { code, url }
 }
@@ -79,7 +85,7 @@ pub async fn poll_claim(
         &json!({
             "code": code,
             "agent_type": agent_type,
-            "version": "kael 1.0",
+            "version": AGENT_VERSION,
         }),
     )
     .await?;
@@ -129,7 +135,19 @@ pub async fn login_guest(secret: &str) -> crate::Result<String> {
     ))
 }
 
-pub async fn create_tunnel(secret: &str, name: &str) -> crate::Result<String> {
+// The `/tunnels/create` REST call requires a real, already-registered agent
+// id: playit ties tunnels to an agent identity, not to a bare secret key.
+// The agent record can exist before its daemon ever connects (the claim
+// portal creates it), but playit rejects tunnel creation with errors like
+// AgentVersionTooOld until the daemon has connected and reported its
+// version - so this retries through that window instead of failing on the
+// first attempt
+pub async fn create_tunnel(
+    secret: &str,
+    name: &str,
+    agent_id: &str,
+    local_port: u16,
+) -> crate::Result<String> {
     #[derive(serde::Deserialize)]
     struct ObjectId {
         id: String,
@@ -140,15 +158,130 @@ pub async fn create_tunnel(secret: &str, name: &str) -> crate::Result<String> {
         "tunnel_type": "minecraft-java",
         "port_type": "tcp",
         "port_count": 1,
-        "origin": { "type": "managed", "agent_id": null },
+        "origin": {
+            "type": "agent",
+            "data": {
+                "agent_id": agent_id,
+                "local_ip": "127.0.0.1",
+                "local_port": local_port,
+            },
+        },
         "enabled": true,
         "alloc": null,
         "firewall_id": null,
         "proxy_protocol": null,
     });
 
-    let object: ObjectId = call("/tunnels/create", Some(secret), &req).await?;
-    Ok(object.id)
+    let mut last_error = None;
+    for attempt in 0..30 {
+        match call::<_, ObjectId>("/tunnels/create", Some(secret), &req).await {
+            Ok(object) => return Ok(object.id),
+            Err(e) => {
+                let message = e.to_string();
+                let agent_still_registering = message
+                    .contains("AgentVersionTooOld")
+                    || message.contains("InvalidAgentId")
+                    || message.contains("AgentNotFound");
+
+                if !agent_still_registering {
+                    return Err(e);
+                }
+
+                if attempt == 0 {
+                    tracing::info!(
+                        "playit agent still registering, retrying tunnel creation: {message}"
+                    );
+                }
+                last_error = Some(e);
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| {
+        crate::ErrorKind::OtherError(
+            "Timed out creating the playit tunnel".to_string(),
+        )
+        .into()
+    }))
+}
+
+/// Checks whether the agent behind this secret key still exists on playit's
+/// side. Returns `Ok(false)` only when playit definitively rejects the key
+/// (e.g. the user deleted the agent from the playit.gg web portal); network
+/// or other errors propagate so a flaky connection can't be mistaken for a
+/// deleted agent.
+pub async fn agent_alive(secret: &str) -> crate::Result<bool> {
+    let result: crate::Result<serde_json::Value> =
+        call("/agents/rundata", Some(secret), &json!({})).await;
+
+    match result {
+        Ok(_) => Ok(true),
+        Err(e) => {
+            let message = e.to_string();
+            if message.contains("InvalidAgentKey")
+                || message.contains("NoLongerValid")
+                || message.contains("AccountDoesNotExist")
+            {
+                Ok(false)
+            } else {
+                Err(e)
+            }
+        }
+    }
+}
+
+pub async fn rename_agent(
+    secret: &str,
+    agent_id: &str,
+    name: &str,
+) -> crate::Result<()> {
+    let _: serde_json::Value = call(
+        "/agents/rename",
+        Some(secret),
+        &json!({ "agent_id": agent_id, "name": name }),
+    )
+    .await?;
+    Ok(())
+}
+
+pub async fn delete_tunnel(secret: &str, tunnel_id: &str) -> crate::Result<()> {
+    let _: serde_json::Value = call(
+        "/tunnels/delete",
+        Some(secret),
+        &json!({ "tunnel_id": tunnel_id }),
+    )
+    .await?;
+    Ok(())
+}
+
+/// Fetches the agent id behind this secret, if playit already knows it
+pub async fn agent_id(secret: &str) -> crate::Result<String> {
+    #[derive(serde::Deserialize)]
+    struct RunData {
+        agent_id: String,
+    }
+
+    let data: RunData =
+        call("/agents/rundata", Some(secret), &json!({})).await?;
+    Ok(data.agent_id)
+}
+
+/// Polls playit's `/agents/rundata` until the daemon running with this
+/// secret has connected and registered itself, returning its agent id
+pub async fn wait_for_agent_id(secret: &str) -> crate::Result<String> {
+    for _ in 0..30 {
+        if let Ok(id) = agent_id(secret).await {
+            return Ok(id);
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
+
+    Err(crate::ErrorKind::OtherError(
+        "Timed out waiting for the playit agent to connect".to_string(),
+    )
+    .into())
 }
 
 pub async fn wait_for_tunnel_address(
@@ -180,18 +313,16 @@ async fn tunnel_address(
     )
     .await?;
 
-    let tunnels = match list.get("tunnels").and_then(|t| t.as_array()) {
-        Some(tunnels) => tunnels,
-        None => return Ok(None),
+    let Some(tunnels) = list.get("tunnels").and_then(|t| t.as_array()) else {
+        return Ok(None);
     };
 
-    let tunnel = match tunnels
+    let Some(tunnel) = tunnels
         .iter()
         .find(|t| t.get("id").and_then(|i| i.as_str()) == Some(tunnel_id))
         .or_else(|| tunnels.first())
-    {
-        Some(tunnel) => tunnel,
-        None => return Ok(None),
+    else {
+        return Ok(None);
     };
 
     let alloc = tunnel.get("alloc");
