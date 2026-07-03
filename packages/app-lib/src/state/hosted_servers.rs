@@ -241,3 +241,29 @@ impl PlayitAccount {
         Ok(())
     }
 }
+
+/// Anonymous per-install identity used to claim kaelmc subdomains through
+/// the DNS worker; generated once and kept for the lifetime of the install
+pub struct DnsOwner;
+
+impl DnsOwner {
+    pub async fn get_or_create(
+        pool: &sqlx::SqlitePool,
+    ) -> crate::Result<String> {
+        let row = sqlx::query("SELECT owner_key FROM dns_owner WHERE id = 0")
+            .fetch_optional(pool)
+            .await?;
+
+        if let Some(row) = row {
+            return Ok(row.get("owner_key"));
+        }
+
+        let key = uuid::Uuid::new_v4().to_string();
+        sqlx::query("INSERT INTO dns_owner (id, owner_key) VALUES (0, ?)")
+            .bind(&key)
+            .execute(pool)
+            .await?;
+
+        Ok(key)
+    }
+}

@@ -104,16 +104,25 @@ async fn cleanup_orphans(state: &State) {
 /// The agent's tunnels died with it, so every server's tunnel and custom
 /// domain state is cleared too — the next setup + start recreates them.
 async fn invalidate_playit_account(state: &State) {
+    let owner_key = crate::state::DnsOwner::get_or_create(&state.pool)
+        .await
+        .ok();
     if let Ok(servers) = HostedServer::get_all(&state.pool).await
-        && let Some(cfg) = cloudflare::config_from_env()
+        && let Some(backend) = cloudflare::backend_from_env(owner_key)
     {
         for server in servers {
-            if let Some(ids_json) = &server.cf_record_ids
-                && let Ok(ids) =
-                    serde_json::from_str::<cloudflare::DnsRecordIds>(ids_json)
-            {
-                cloudflare::delete_server_records(&cfg, &ids).await;
-            }
+            let Some(custom_domain) = &server.custom_domain else {
+                continue;
+            };
+            let ids = server.cf_record_ids.as_deref().and_then(|json| {
+                serde_json::from_str::<cloudflare::DnsRecordIds>(json).ok()
+            });
+            cloudflare::release_server_records(
+                &backend,
+                custom_domain,
+                ids.as_ref(),
+            )
+            .await;
         }
     }
 
@@ -288,12 +297,21 @@ pub async fn remove_server(id: String) -> crate::Result<()> {
             );
         }
 
-        if let Some(cfg) = cloudflare::config_from_env()
-            && let Some(ids_json) = &server.cf_record_ids
-            && let Ok(ids) =
-                serde_json::from_str::<cloudflare::DnsRecordIds>(ids_json)
+        let owner_key = crate::state::DnsOwner::get_or_create(&state.pool)
+            .await
+            .ok();
+        if let Some(custom_domain) = &server.custom_domain
+            && let Some(backend) = cloudflare::backend_from_env(owner_key)
         {
-            cloudflare::delete_server_records(&cfg, &ids).await;
+            let ids = server.cf_record_ids.as_deref().and_then(|json| {
+                serde_json::from_str::<cloudflare::DnsRecordIds>(json).ok()
+            });
+            cloudflare::release_server_records(
+                &backend,
+                custom_domain,
+                ids.as_ref(),
+            )
+            .await;
         }
 
         let _ =
@@ -346,60 +364,83 @@ pub async fn ensure_tunnel(id: &str) -> crate::Result<String> {
         }
     };
 
-    // When Cloudflare is configured the kaelmc domain IS the server's
-    // address - the app never shows the raw playit URL - so failing to
-    // create it fails the whole start rather than silently degrading
-    if server.custom_domain.is_none()
-        && let Some(cfg) = cloudflare::config_from_env()
-    {
-        let (host, port) = match tunnel_url.rsplit_once(':') {
-            Some((host, port)) => (host, port.parse().unwrap_or(DEFAULT_PORT)),
-            None => (tunnel_url.as_str(), DEFAULT_PORT),
-        };
+    // When DNS is configured the kaelmc domain IS the server's address -
+    // the app never shows the raw playit URL - so failing to create it
+    // fails the whole start rather than silently degrading
+    let owner_key = crate::state::DnsOwner::get_or_create(&state.pool)
+        .await
+        .ok();
+    if let Some(backend) = cloudflare::backend_from_env(owner_key) {
+        let is_worker =
+            matches!(backend, cloudflare::DnsBackend::Worker { .. });
 
-        // Domains owned by the user's other servers are off-limits even
-        // while those servers are offline
-        let reserved: Vec<String> = HostedServer::get_all(&state.pool)
-            .await?
-            .into_iter()
-            .filter(|s| s.id != server.id)
-            .filter_map(|s| s.custom_domain)
-            .collect();
-
-        let mut last_error = None;
-        for _ in 0..3 {
-            match cloudflare::create_server_records(
-                &cfg,
-                &server.name,
-                host,
-                port,
-                &reserved,
-            )
-            .await
-            {
-                Ok((fqdn, ids)) => {
-                    server.custom_domain = Some(fqdn);
-                    server.cf_record_ids = serde_json::to_string(&ids).ok();
-                    server.modified = Utc::now().timestamp();
-                    server.upsert(&state.pool).await?;
-                    last_error = None;
-                    break;
+        // Worker mode re-claims on every start: this keeps the records
+        // pointed at the current tunnel and renews the subdomain's
+        // ownership lease. Direct mode only creates missing domains.
+        if server.custom_domain.is_none() || is_worker {
+            let (host, port) = match tunnel_url.rsplit_once(':') {
+                Some((host, port)) => {
+                    (host, port.parse().unwrap_or(DEFAULT_PORT))
                 }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to create a custom domain for server {id}, retrying: {e}"
-                    );
-                    last_error = Some(e);
-                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                None => (tunnel_url.as_str(), DEFAULT_PORT),
+            };
+
+            // Domains owned by the user's other servers are off-limits
+            // even while those servers are offline
+            let reserved: Vec<String> = HostedServer::get_all(&state.pool)
+                .await?
+                .into_iter()
+                .filter(|s| s.id != server.id)
+                .filter_map(|s| s.custom_domain)
+                .collect();
+
+            // On a worker refresh, keep the subdomain the server already
+            // has instead of deriving a fresh one from its name
+            let domain_suffix = format!(".{}", backend.domain());
+            let claim_name = server
+                .custom_domain
+                .as_ref()
+                .and_then(|d| d.strip_suffix(&domain_suffix))
+                .unwrap_or(&server.name)
+                .to_string();
+
+            let mut last_error = None;
+            for _ in 0..3 {
+                match cloudflare::create_server_records(
+                    &backend,
+                    &claim_name,
+                    host,
+                    port,
+                    &reserved,
+                )
+                .await
+                {
+                    Ok((fqdn, ids)) => {
+                        server.custom_domain = Some(fqdn);
+                        server.cf_record_ids =
+                            ids.and_then(|i| serde_json::to_string(&i).ok());
+                        server.modified = Utc::now().timestamp();
+                        server.upsert(&state.pool).await?;
+                        last_error = None;
+                        break;
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to create a custom domain for server {id}, retrying: {e}"
+                        );
+                        last_error = Some(e);
+                        tokio::time::sleep(std::time::Duration::from_secs(2))
+                            .await;
+                    }
                 }
             }
-        }
 
-        if let Some(e) = last_error {
-            return Err(crate::ErrorKind::OtherError(format!(
-                "Could not create the server's kaelmc.net address: {e}"
-            ))
-            .into());
+            if let Some(e) = last_error {
+                return Err(crate::ErrorKind::OtherError(format!(
+                    "Could not create the server's public address: {e}"
+                ))
+                .into());
+            }
         }
     }
 
@@ -620,6 +661,16 @@ static TUNNEL_STRIKES: std::sync::LazyLock<dashmap::DashMap<String, u32>> =
     std::sync::LazyLock::new(dashmap::DashMap::new);
 const TUNNEL_STRIKE_LIMIT: u32 = 3;
 
+/// When each server's daemon was last restarted by the wedge probe. If the
+/// probe is ever wrong about a daemon (e.g. playit-side outage making the
+/// tunnel unreachable while the daemon is fine), this stops the heal loop
+/// from flapping the tunnel with endless restarts.
+static LAST_WEDGE_RESTART: std::sync::LazyLock<
+    dashmap::DashMap<String, std::time::Instant>,
+> = std::sync::LazyLock::new(dashmap::DashMap::new);
+const WEDGE_RESTART_COOLDOWN: std::time::Duration =
+    std::time::Duration::from_secs(60);
+
 async fn heal_daemons(state: &State, ids: &[String]) {
     for id in ids {
         let daemon_exited = state.hosting_manager.agent_needs_restart(id);
@@ -646,7 +697,19 @@ async fn heal_daemons(state: &State, ids: &[String]) {
 
                 if strikes >= TUNNEL_STRIKE_LIMIT {
                     TUNNEL_STRIKES.remove(id);
-                    daemon_wedged = true;
+
+                    let recently_restarted = LAST_WEDGE_RESTART
+                        .get(id)
+                        .is_some_and(|t| t.elapsed() < WEDGE_RESTART_COOLDOWN);
+                    if recently_restarted {
+                        tracing::warn!(
+                            "Tunnel for server {id} is still unresponsive after a recent daemon restart; waiting before restarting again"
+                        );
+                    } else {
+                        LAST_WEDGE_RESTART
+                            .insert(id.clone(), std::time::Instant::now());
+                        daemon_wedged = true;
+                    }
                 }
             }
         }

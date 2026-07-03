@@ -129,7 +129,6 @@ const claimStatus = ref('')
 const resultUrl = ref('')
 const errorMessage = ref('')
 const createdId = ref('')
-const createdPort = ref(25565)
 let flowToken = 0
 
 let unlistenLoading: (() => void) | undefined
@@ -171,7 +170,6 @@ function openWizard() {
 	resultUrl.value = ''
 	errorMessage.value = ''
 	createdId.value = ''
-	createdPort.value = 25565
 	wizardOpen.value = true
 }
 
@@ -197,7 +195,6 @@ async function beginCreate() {
 		const server = await createServer(name)
 		if (token !== flowToken) return
 		createdId.value = server.id
-		createdPort.value = server.port
 		invalidate()
 
 		const hasAccount = await playitHasAccount()
@@ -265,14 +262,11 @@ async function finishTunnel(id: string, token: number) {
 
 const sortedServers = computed(() => servers.value ?? [])
 
-// The kaelmc domain is the only public address the app ever shows; the raw
-// playit tunnel URL stays internal
+// The kaelmc domain is the only address the app ever shows - for every
+// player including the hosting machine; the raw playit tunnel URL stays
+// internal
 function primaryAddress(server: HostedServer): string | null {
 	return server.custom_domain
-}
-
-function localAddress(server: HostedServer): string {
-	return `localhost:${server.port}`
 }
 </script>
 
@@ -310,11 +304,6 @@ function localAddress(server: HostedServer): string {
 							<button class="link-button" @click="copy(primaryAddress(server)!)">Copy</button>
 						</div>
 						<div v-else class="tunnel muted">No address yet — activate to create one.</div>
-						<div class="tunnel secondary">
-							<span class="tunnel-label">This device:</span>
-							<span class="tunnel-url">{{ localAddress(server) }}</span>
-							<button class="link-button" @click="copy(localAddress(server))">Copy</button>
-						</div>
 					</div>
 					<div class="server-actions">
 						<ButtonStyled v-if="!isRunning(server.id)" color="green">
@@ -407,15 +396,10 @@ function localAddress(server: HostedServer): string {
 
 				<template v-else-if="step === 'done'">
 					<h2>Server ready</h2>
-					<p>Share this address with your friends:</p>
+					<p>Everyone joins with this address — including you, on this device:</p>
 					<div class="result-url">
 						<span>{{ resultUrl }}</span>
 						<button class="link-button" @click="copy(resultUrl)">Copy</button>
-					</div>
-					<p>Playing on this device? Add it to an Instance with this address instead:</p>
-					<div class="result-url">
-						<span>localhost:{{ createdPort }}</span>
-						<button class="link-button" @click="copy(`localhost:${createdPort}`)">Copy</button>
 					</div>
 					<div class="wizard-actions">
 						<ButtonStyled color="brand">
@@ -544,10 +528,6 @@ function localAddress(server: HostedServer): string {
 		color: var(--color-secondary);
 		font-size: var(--font-size-sm);
 	}
-}
-
-.tunnel-label {
-	color: var(--color-secondary);
 }
 
 .server-actions {

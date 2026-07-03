@@ -41,11 +41,53 @@ pub fn config_from_env() -> Option<CloudflareConfig> {
     Some(CloudflareConfig {
         token,
         zone_id,
-        domain: setting("KAELMC_DOMAIN", option_env!("KAELMC_DOMAIN"))
-            .map(|d| d.trim_matches('.').to_string())
-            .filter(|d| !d.is_empty())
-            .unwrap_or_else(|| DEFAULT_DOMAIN.to_string()),
+        domain: domain_from_env(),
     })
+}
+
+fn domain_from_env() -> String {
+    setting("KAELMC_DOMAIN", option_env!("KAELMC_DOMAIN"))
+        .map(|d| d.trim_matches('.').to_string())
+        .filter(|d| !d.is_empty())
+        .unwrap_or_else(|| DEFAULT_DOMAIN.to_string())
+}
+
+/// How the app manages `<name>.<domain>` DNS records. The Worker variant is
+/// the distribution-safe path: the Cloudflare token lives only inside the
+/// kaelmc-dns Worker (see `packages/app-lib/cloudflare-worker/`), the app
+/// authenticates with an anonymous per-install owner key, and subdomain
+/// ownership is enforced server-side. The Direct variant talks straight to
+/// the Cloudflare API and only makes sense for local development.
+pub enum DnsBackend {
+    Worker {
+        url: String,
+        owner_key: String,
+        domain: String,
+    },
+    Direct(CloudflareConfig),
+}
+
+impl DnsBackend {
+    pub fn domain(&self) -> &str {
+        match self {
+            Self::Worker { domain, .. } => domain,
+            Self::Direct(cfg) => &cfg.domain,
+        }
+    }
+}
+
+pub fn backend_from_env(owner_key: Option<String>) -> Option<DnsBackend> {
+    if let Some(url) =
+        setting("KAELMC_WORKER_URL", option_env!("KAELMC_WORKER_URL"))
+    {
+        return Some(DnsBackend::Worker {
+            url: url.trim_end_matches('/').to_string(),
+            owner_key: owner_key?,
+            domain: domain_from_env(),
+        });
+    }
+
+    config_from_env().map(DnsBackend::Direct)
 }
 
 #[derive(Serialize, serde::Deserialize)]
@@ -147,37 +189,183 @@ async fn resolve_ipv4(host: &str) -> crate::Result<String> {
         })
 }
 
-/// Creates the DNS records that make `<subdomain>.<domain>` join the playit
-/// tunnel: an A record pinned to playit's resolved IPv4 address, plus an SRV
-/// record (Minecraft clients resolve `_minecraft._tcp`, which carries the
-/// tunnel's port) pointing back at that same A record. Returns the chosen
-/// FQDN and the record ids for later cleanup.
-///
-/// A name already present in the zone only forces a `-suffix` when it is in
-/// active use: either another local server owns it (`reserved`), or a
-/// Minecraft server actually answers behind its records. Dead leftovers
-/// (e.g. from a cleanup that failed) are deleted and the name reclaimed, so
-/// a name's *previous* use never costs a new server its natural subdomain.
+/// Creates (or refreshes) the DNS records that make `<subdomain>.<domain>`
+/// join the playit tunnel: an A record pinned to playit's resolved IPv4
+/// address, plus an SRV record (Minecraft clients resolve `_minecraft._tcp`,
+/// which carries the tunnel's port) pointing back at that same A record.
+/// Returns the chosen FQDN and, in direct mode, the record ids for cleanup.
 pub async fn create_server_records(
-    cfg: &CloudflareConfig,
+    backend: &DnsBackend,
     server_name: &str,
     target_host: &str,
     port: u16,
     reserved: &[String],
-) -> crate::Result<(String, DnsRecordIds)> {
+) -> crate::Result<(String, Option<DnsRecordIds>)> {
     let ipv4 = resolve_ipv4(target_host).await?;
 
+    match backend {
+        DnsBackend::Worker {
+            url,
+            owner_key,
+            domain,
+        } => {
+            // Cross-user conflicts are handled by the worker; only same-
+            // install conflicts (two of the user's own servers sharing a
+            // name) need handling here, since the worker sees one owner
+            let mut subdomain = sanitize_subdomain(server_name);
+            if reserved
+                .iter()
+                .any(|r| r == &format!("{subdomain}.{domain}"))
+            {
+                subdomain = format!("{subdomain}-{}", random_suffix());
+            }
+
+            let fqdn =
+                worker_claim(url, owner_key, &subdomain, &ipv4, port).await?;
+            Ok((fqdn, None))
+        }
+        DnsBackend::Direct(cfg) => {
+            let (fqdn, ids) =
+                direct_create(cfg, server_name, &ipv4, port, reserved).await?;
+            Ok((fqdn, Some(ids)))
+        }
+    }
+}
+
+/// Removes a server's DNS records and, in worker mode, releases its
+/// subdomain claim. Best-effort: failures are logged, never propagated.
+pub async fn release_server_records(
+    backend: &DnsBackend,
+    custom_domain: &str,
+    ids: Option<&DnsRecordIds>,
+) {
+    match backend {
+        DnsBackend::Worker { url, owner_key, .. } => {
+            let suffix = format!(".{}", backend.domain());
+            let Some(subdomain) = custom_domain.strip_suffix(&suffix) else {
+                return;
+            };
+            if let Err(e) = worker_release(url, owner_key, subdomain).await {
+                tracing::warn!(
+                    "Failed to release subdomain {custom_domain}: {e}"
+                );
+            }
+        }
+        DnsBackend::Direct(cfg) => {
+            if let Some(ids) = ids {
+                delete_server_records(cfg, ids).await;
+            }
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct WorkerResponse {
+    fqdn: Option<String>,
+    error: Option<String>,
+    #[allow(dead_code)]
+    ok: Option<bool>,
+}
+
+async fn worker_call(
+    url: &str,
+    path: &str,
+    body: &serde_json::Value,
+) -> crate::Result<WorkerResponse> {
+    let response = reqwest::Client::new()
+        .post(format!("{url}{path}"))
+        .json(body)
+        .send()
+        .await?;
+
+    let status = response.status();
+    let text = response.text().await?;
+    serde_json::from_str(&text).map_err(|_| {
+        crate::ErrorKind::OtherError(format!(
+            "Unexpected DNS worker response ({path}, {status}): {text}"
+        ))
+        .into()
+    })
+}
+
+async fn worker_claim(
+    url: &str,
+    owner_key: &str,
+    subdomain: &str,
+    ip: &str,
+    port: u16,
+) -> crate::Result<String> {
+    let response = worker_call(
+        url,
+        "/claim",
+        &json!({
+            "subdomain": subdomain,
+            "ip": ip,
+            "port": port,
+            "owner": owner_key,
+        }),
+    )
+    .await?;
+
+    response.fqdn.ok_or_else(|| {
+        crate::ErrorKind::OtherError(format!(
+            "The DNS worker refused the claim: {}",
+            response
+                .error
+                .unwrap_or_else(|| "unknown error".to_string())
+        ))
+        .into()
+    })
+}
+
+async fn worker_release(
+    url: &str,
+    owner_key: &str,
+    subdomain: &str,
+) -> crate::Result<()> {
+    let response = worker_call(
+        url,
+        "/release",
+        &json!({ "subdomain": subdomain, "owner": owner_key }),
+    )
+    .await?;
+
+    match response.error {
+        Some(error) => Err(crate::ErrorKind::OtherError(format!(
+            "The DNS worker refused the release: {error}"
+        ))
+        .into()),
+        None => Ok(()),
+    }
+}
+
+fn random_suffix() -> String {
+    (0..4)
+        .map(|_| {
+            let n = rand::random::<u8>() % 36;
+            char::from_digit(n as u32, 36).unwrap_or('0')
+        })
+        .collect()
+}
+
+/// Direct-mode record creation. A name already present in the zone only
+/// forces a `-suffix` when it is in active use: either another local server
+/// owns it (`reserved`), or a Minecraft server actually answers behind its
+/// records. Dead leftovers (e.g. from a cleanup that failed) are deleted and
+/// the name reclaimed, so a name's *previous* use never costs a new server
+/// its natural subdomain.
+async fn direct_create(
+    cfg: &CloudflareConfig,
+    server_name: &str,
+    ipv4: &str,
+    port: u16,
+    reserved: &[String],
+) -> crate::Result<(String, DnsRecordIds)> {
     let mut subdomain = sanitize_subdomain(server_name);
     let mut fqdn = format!("{subdomain}.{}", cfg.domain);
 
     if !name_available(cfg, &fqdn, reserved).await? {
-        let suffix: String = (0..4)
-            .map(|_| {
-                let n = rand::random::<u8>() % 36;
-                char::from_digit(n as u32, 36).unwrap_or('0')
-            })
-            .collect();
-        subdomain = format!("{subdomain}-{suffix}");
+        subdomain = format!("{subdomain}-{}", random_suffix());
         fqdn = format!("{subdomain}.{}", cfg.domain);
 
         if !name_available(cfg, &fqdn, reserved).await? {
