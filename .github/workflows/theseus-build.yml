@@ -158,6 +158,14 @@ jobs:
       - name: Setup Turbo cache
         uses: rharkor/caching-for-turbo@56219402aacc0d06b650d898c222996dbc1191ec # v2.3.14
 
+      - name: Disable workerd native build on Windows arm64
+        # workerd (pulled in by packages/ui's wrangler devDependency) has no
+        # win32-arm64 binary and hard-fails its postinstall; the app build
+        # never invokes wrangler, so just skip building it on this platform
+        if: matrix.platform == 'windows-11-arm'
+        shell: bash
+        run: dasel put -f pnpm-workspace.yaml -t bool -v false 'allowBuilds.workerd'
+
       - name: Install dependencies
         run: pnpm install
 
