@@ -179,7 +179,7 @@ const messages = defineMessages({
 			</div>
 		</div>
 
-		<div class="shrink-0 flex items-center min-h-[60vh]">
+		<div class="shrink-0 flex items-center self-start sticky top-6 min-h-[60vh]">
 			<div class="flex h-[80vh] w-96 items-center justify-center max-[700px]:h-[50vh]">
 				<SkinPreviewRenderer
 					:cape-src="capeTexture"
