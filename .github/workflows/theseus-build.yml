@@ -122,6 +122,9 @@ jobs:
           repo: TomWright/dasel
           tag: v2.8.1
           extension-matching: disable
+          # dasel v2.8.1 has no windows/arm64 asset; windows-11-arm can run
+          # the amd64 binary through Windows' built-in x64 emulation
+          arch: ${{ matrix.platform == 'windows-11-arm' && 'amd64' || '' }}
           rename-to: ${{ contains(matrix.platform, 'windows') && 'dasel.exe' || 'dasel' }}
           chmod: 0755
 
@@ -130,7 +133,14 @@ jobs:
         run: |
           APP_VERSION="${{ inputs.app-version-override }}"
           if [ -z "$APP_VERSION" ]; then
-            APP_VERSION="$(git describe --tags --always | sed -E 's/-([0-9]+)-(g[0-9a-fA-F]+)$/-canary+\1.\2/')"
+            GIT_DESCRIBE="$(git describe --tags --always 2>/dev/null || true)"
+            if echo "$GIT_DESCRIBE" | grep -qE '^v?[0-9]+\.[0-9]+\.[0-9]+'; then
+              APP_VERSION="$(echo "$GIT_DESCRIBE" | sed -E 's/-([0-9]+)-(g[0-9a-fA-F]+)$/-canary+\1.\2/')"
+            else
+              # No semver tags exist in this repo yet; fall back to a valid
+              # semver so `cargo metadata` doesn't choke on a bare hash
+              APP_VERSION="0.0.0-canary+$(git rev-parse --short HEAD)"
+            fi
           fi
           BUILD_ENVIRONMENT="${{ inputs.environment || 'prod' }}"
           echo "Setting application version to $APP_VERSION"
