@@ -357,6 +357,15 @@ pub async fn ensure_tunnel(id: &str) -> crate::Result<String> {
             None => (tunnel_url.as_str(), DEFAULT_PORT),
         };
 
+        // Domains owned by the user's other servers are off-limits even
+        // while those servers are offline
+        let reserved: Vec<String> = HostedServer::get_all(&state.pool)
+            .await?
+            .into_iter()
+            .filter(|s| s.id != server.id)
+            .filter_map(|s| s.custom_domain)
+            .collect();
+
         let mut last_error = None;
         for _ in 0..3 {
             match cloudflare::create_server_records(
@@ -364,6 +373,7 @@ pub async fn ensure_tunnel(id: &str) -> crate::Result<String> {
                 &server.name,
                 host,
                 port,
+                &reserved,
             )
             .await
             {

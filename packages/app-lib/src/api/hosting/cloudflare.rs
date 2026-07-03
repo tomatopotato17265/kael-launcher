@@ -152,18 +152,25 @@ async fn resolve_ipv4(host: &str) -> crate::Result<String> {
 /// record (Minecraft clients resolve `_minecraft._tcp`, which carries the
 /// tunnel's port) pointing back at that same A record. Returns the chosen
 /// FQDN and the record ids for later cleanup.
+///
+/// A name already present in the zone only forces a `-suffix` when it is in
+/// active use: either another local server owns it (`reserved`), or a
+/// Minecraft server actually answers behind its records. Dead leftovers
+/// (e.g. from a cleanup that failed) are deleted and the name reclaimed, so
+/// a name's *previous* use never costs a new server its natural subdomain.
 pub async fn create_server_records(
     cfg: &CloudflareConfig,
     server_name: &str,
     target_host: &str,
     port: u16,
+    reserved: &[String],
 ) -> crate::Result<(String, DnsRecordIds)> {
     let ipv4 = resolve_ipv4(target_host).await?;
 
     let mut subdomain = sanitize_subdomain(server_name);
     let mut fqdn = format!("{subdomain}.{}", cfg.domain);
 
-    if record_name_taken(cfg, &fqdn).await? {
+    if !name_available(cfg, &fqdn, reserved).await? {
         let suffix: String = (0..4)
             .map(|_| {
                 let n = rand::random::<u8>() % 36;
@@ -173,7 +180,7 @@ pub async fn create_server_records(
         subdomain = format!("{subdomain}-{suffix}");
         fqdn = format!("{subdomain}.{}", cfg.domain);
 
-        if record_name_taken(cfg, &fqdn).await? {
+        if !name_available(cfg, &fqdn, reserved).await? {
             return Err(crate::ErrorKind::OtherError(format!(
                 "Could not find a free subdomain for {fqdn}"
             ))
@@ -257,19 +264,71 @@ async fn delete_record(
     Ok(())
 }
 
-async fn record_name_taken(
+async fn records_named(
     cfg: &CloudflareConfig,
-    fqdn: &str,
-) -> crate::Result<bool> {
-    let records: Vec<serde_json::Value> = call::<(), _>(
+    name: &str,
+) -> crate::Result<Vec<serde_json::Value>> {
+    call::<(), _>(
         cfg,
         reqwest::Method::GET,
-        &format!("/zones/{}/dns_records?name={fqdn}", cfg.zone_id),
+        &format!("/zones/{}/dns_records?name={name}", cfg.zone_id),
         None,
     )
-    .await?;
+    .await
+}
 
-    Ok(!records.is_empty())
+/// Decides whether `fqdn` can be used for a new server. Existing records
+/// only make it unavailable when they are in active use; dead leftovers are
+/// deleted so the name frees up again.
+async fn name_available(
+    cfg: &CloudflareConfig,
+    fqdn: &str,
+    reserved: &[String],
+) -> crate::Result<bool> {
+    if reserved.iter().any(|r| r == fqdn) {
+        return Ok(false);
+    }
+
+    let a_records = records_named(cfg, fqdn).await?;
+    let srv_records =
+        records_named(cfg, &format!("_minecraft._tcp.{fqdn}")).await?;
+
+    if a_records.is_empty() && srv_records.is_empty() {
+        return Ok(true);
+    }
+
+    let target_ip = a_records
+        .iter()
+        .find(|r| r.get("type").and_then(|t| t.as_str()) == Some("A"))
+        .and_then(|r| r.get("content"))
+        .and_then(|c| c.as_str());
+    let srv_port = srv_records
+        .iter()
+        .find(|r| r.get("type").and_then(|t| t.as_str()) == Some("SRV"))
+        .and_then(|r| r.get("data"))
+        .and_then(|d| d.get("port"))
+        .and_then(|p| p.as_u64())
+        .and_then(|p| u16::try_from(p).ok());
+
+    if let (Some(ip), Some(port)) = (target_ip, srv_port)
+        && super::minecraft_responds(ip, port).await
+    {
+        return Ok(false);
+    }
+
+    tracing::info!(
+        "Reclaiming {fqdn}: its DNS records exist but nothing answers behind them"
+    );
+    for record in a_records.iter().chain(srv_records.iter()) {
+        if let Some(id) = record.get("id").and_then(|i| i.as_str())
+            && let Err(e) = delete_record(cfg, id).await
+        {
+            tracing::warn!("Failed to delete stale record {id}: {e}");
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
 }
 
 fn sanitize_subdomain(name: &str) -> String {

@@ -64,3 +64,12 @@ export async function remove_user(user) {
 export async function users() {
 	return await invoke('plugin:auth|get_users')
 }
+
+/**
+ * Forces a refresh of the active user's authentication token, returning the
+ * updated credential.
+ * @returns {Promise<Credential | undefined>}
+ */
+export async function refresh_user() {
+	return await invoke('plugin:auth|refresh_user')
+}

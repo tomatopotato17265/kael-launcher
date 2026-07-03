@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { EditIcon } from '@kael/assets'
+import { CopyIcon, EditIcon, ExternalIcon, RefreshCwIcon } from '@kael/assets'
 import {
 	defineMessages,
 	injectNotificationManager,
@@ -11,7 +11,7 @@ import type { Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import AccountsCard from '@/components/ui/AccountsCard.vue'
-import { get_default_user, users } from '@/helpers/auth'
+import { get_default_user, refresh_user, users } from '@/helpers/auth'
 import type { Cape, Skin } from '@/helpers/skins.ts'
 import {
 	get_available_capes,
@@ -21,7 +21,7 @@ import {
 import { useBreadcrumbs } from '@/store/breadcrumbs'
 
 const { formatMessage } = useVIntl()
-const { handleError } = injectNotificationManager()
+const { addNotification, handleError } = injectNotificationManager()
 const route = useRoute()
 const router = useRouter()
 const breadcrumbs = useBreadcrumbs()
@@ -45,6 +45,7 @@ const currentUser = ref()
 const capes = ref<Cape[]>([])
 const equippedSkin = ref<Skin | null>(null)
 const skinTexture = ref('')
+const refreshingToken = ref(false)
 
 const username = computed(() => currentUser.value?.profile?.name)
 const capeTexture = computed(
@@ -72,6 +73,37 @@ async function loadSkinTexture(skin: Skin) {
 
 		handleError(error as Error)
 		return ''
+	}
+}
+
+async function copyAuthToken() {
+	if (!authToken.value) return
+
+	try {
+		await navigator.clipboard.writeText(authToken.value)
+	} catch (error) {
+		handleError(error as Error)
+	}
+}
+
+async function refreshAuthToken() {
+	if (refreshingToken.value) return
+
+	refreshingToken.value = true
+
+	try {
+		const refreshed = await refresh_user()
+		if (refreshed) currentUser.value = refreshed
+
+		addNotification({
+			title: formatMessage(messages.refreshAuthTokenSuccessTitle),
+			text: formatMessage(messages.refreshAuthTokenSuccessText),
+			type: 'success',
+		})
+	} catch (error) {
+		handleError(error as Error)
+	} finally {
+		refreshingToken.value = false
 	}
 }
 
@@ -120,7 +152,23 @@ const messages = defineMessages({
 	},
 	authTokenDescription: {
 		id: 'app.account.stats.auth-token.description',
-		defaultMessage: "This account's authentication token.",
+		defaultMessage: "This account's authentication token. Don't share this with anyone!",
+	},
+	copyAuthTokenButton: {
+		id: 'app.account.stats.auth-token.copy-button',
+		defaultMessage: 'Copy auth token',
+	},
+	refreshAuthTokenButton: {
+		id: 'app.account.stats.auth-token.refresh-button',
+		defaultMessage: 'Refresh auth token',
+	},
+	refreshAuthTokenSuccessTitle: {
+		id: 'app.account.stats.auth-token.refresh-success.title',
+		defaultMessage: 'Auth token refreshed',
+	},
+	refreshAuthTokenSuccessText: {
+		id: 'app.account.stats.auth-token.refresh-success.text',
+		defaultMessage: 'Your authentication token was successfully refreshed.',
 	},
 })
 </script>
@@ -159,9 +207,10 @@ const messages = defineMessages({
 						:href="namemcUrl"
 						target="_blank"
 						rel="noopener noreferrer"
-						class="break-all text-right text-brand hover:underline"
+						class="flex shrink-0 items-center gap-1.5 text-brand hover:underline [&>svg]:size-4"
 					>
-						{{ namemcUrl }}
+						{{ formatMessage(messages.namemcTitle) }}
+						<ExternalIcon />
 					</a>
 				</div>
 
@@ -172,9 +221,25 @@ const messages = defineMessages({
 						</h2>
 						<p class="m-0 mt-1">{{ formatMessage(messages.authTokenDescription) }}</p>
 					</div>
-					<span class="max-w-sm break-all text-right font-mono text-xs text-primary">{{
-						authToken
-					}}</span>
+					<div class="flex shrink-0 items-center gap-2">
+						<button
+							v-tooltip.left="formatMessage(messages.refreshAuthTokenButton)"
+							:aria-label="formatMessage(messages.refreshAuthTokenButton)"
+							:disabled="refreshingToken"
+							class="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border-0 bg-surface-4 text-primary shadow-md transition-[filter,transform] duration-200 hover:brightness-[--hover-brightness] focus-visible:brightness-[--hover-brightness] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 [&>svg]:size-4"
+							@click="refreshAuthToken"
+						>
+							<RefreshCwIcon :class="{ 'animate-spin': refreshingToken }" />
+						</button>
+						<button
+							v-tooltip.left="formatMessage(messages.copyAuthTokenButton)"
+							:aria-label="formatMessage(messages.copyAuthTokenButton)"
+							class="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border-0 bg-surface-4 text-primary shadow-md transition-[filter,transform] duration-200 hover:brightness-[--hover-brightness] focus-visible:brightness-[--hover-brightness] active:scale-95 [&>svg]:size-4"
+							@click="copyAuthToken"
+						>
+							<CopyIcon />
+						</button>
+					</div>
 				</div>
 			</div>
 		</div>

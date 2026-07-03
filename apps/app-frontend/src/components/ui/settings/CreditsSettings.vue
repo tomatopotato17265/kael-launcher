@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PaletteIcon } from '@kael/assets'
+import { ExternalIcon, PaletteIcon } from '@kael/assets'
 import { ButtonStyled, Combobox, defineMessages, ThemeSelector, Toggle, useVIntl } from '@kael/ui'
 import { ref, watch } from 'vue'
 
@@ -141,9 +141,10 @@ watch(
 				href="https://www.blockbench.net"
 				target="_blank"
 				rel="noopener noreferrer"
-				class="text-brand hover:underline shrink-0"
+				class="flex shrink-0 items-center gap-1.5 text-brand hover:underline [&>svg]:size-4"
 			>
 				{{ formatMessage(messages.blockbenchLink) }}
+				<ExternalIcon />
 			</a>
 		</div>
 	</div>

@@ -88,3 +88,11 @@ pub async fn users() -> crate::Result<Vec<Credentials>> {
     let users = Credentials::get_all(&state.pool).await?;
     Ok(users.into_iter().map(|x| x.1).collect())
 }
+
+/// Force a refresh of the active user's authentication token, returning the
+/// updated credentials.
+#[tracing::instrument]
+pub async fn refresh_user() -> crate::Result<Option<Credentials>> {
+    let state = State::get().await?;
+    Credentials::refresh_active(&state.pool).await
+}

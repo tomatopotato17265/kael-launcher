@@ -255,10 +255,27 @@ impl Credentials {
         &mut self,
         exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite> + Copy,
     ) -> crate::Result<()> {
+        self.refresh_inner(exec, false).await
+    }
+
+    /// Refreshes the authentication tokens for this user unconditionally, even
+    /// when the current token is still valid.
+    pub async fn force_refresh(
+        &mut self,
+        exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite> + Copy,
+    ) -> crate::Result<()> {
+        self.refresh_inner(exec, true).await
+    }
+
+    async fn refresh_inner(
+        &mut self,
+        exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite> + Copy,
+        force: bool,
+    ) -> crate::Result<()> {
         // Use a margin of 5 minutes to give e.g. Minecraft and potentially
         // other operations that depend on a fresh token 5 minutes to complete
         // from now, and deal with some classes of clock skew
-        if self.expires > Utc::now() + Duration::minutes(5) {
+        if !force && self.expires > Utc::now() + Duration::minutes(5) {
             return Ok(());
         }
 
@@ -473,6 +490,20 @@ impl Credentials {
                     Err(err)
                 }
             }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Forces a refresh of the currently selected credentials, re-issuing the
+    /// Minecraft access token even when it has not yet expired, and returns the
+    /// updated credentials.
+    pub async fn refresh_active(
+        exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite> + Copy,
+    ) -> crate::Result<Option<Credentials>> {
+        if let Some(mut creds) = Self::get_active(exec).await? {
+            creds.force_refresh(exec).await?;
+            Ok(Some(creds))
         } else {
             Ok(None)
         }

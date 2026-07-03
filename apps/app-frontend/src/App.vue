@@ -18,7 +18,6 @@ import {
 	LogOutIcon,
 	UserIcon,
 	NotepadTextIcon,
-	PlusIcon,
 	RefreshCwIcon,
 	ServerStackIcon,
 	SettingsIcon,
@@ -71,7 +70,6 @@ import InstallToPlayModal from '@/components/ui/modal/InstallToPlayModal.vue'
 import ModpackAlreadyInstalledModal from '@/components/ui/modal/ModpackAlreadyInstalledModal.vue'
 import UpdateToPlayModal from '@/components/ui/modal/UpdateToPlayModal.vue'
 import NavButton from '@/components/ui/NavButton.vue'
-import QuickInstanceSwitcher from '@/components/ui/QuickInstanceSwitcher.vue'
 import SplashScreen from '@/components/ui/SplashScreen.vue'
 import WindowControls from '@/components/ui/WindowControls.vue'
 import { useCheckDisableMouseover } from '@/composables/macCssFix.js'
@@ -224,14 +222,6 @@ const {
 
 const availableSurvey = ref(false)
 const displayedServerInviteNotifications = new Set()
-
-const offline = ref(!navigator.onLine)
-window.addEventListener('offline', () => {
-	offline.value = true
-})
-window.addEventListener('online', () => {
-	offline.value = false
-})
 
 const showOnboarding = ref(false)
 const nativeDecorations = ref(false)
@@ -1280,17 +1270,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			>
 				<ServerStackIcon />
 			</NavButton>
-			<div class="h-px w-6 mx-auto my-2 bg-surface-5"></div>
-			<suspense>
-				<QuickInstanceSwitcher />
-			</suspense>
-			<NavButton
-				v-tooltip.right="'Create new instance'"
-				:to="() => installationModal?.show()"
-				:disabled="offline"
-			>
-				<PlusIcon />
-			</NavButton>
+			<!-- Intentionally no recent-instances switcher or "new instance" button here — instance shortcuts don't belong in this sidebar. -->
 			<div class="flex flex-grow"></div>
 			<NavButton
 				v-tooltip.right="formatMessage(commonMessages.settingsLabel)"

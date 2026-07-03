@@ -18,6 +18,7 @@ fn main() {
                         "get_default_user",
                         "set_default_user",
                         "get_users",
+                        "refresh_user",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
