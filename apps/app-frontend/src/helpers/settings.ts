@@ -6,7 +6,7 @@
 import { invoke } from '@tauri-apps/api/core'
 
 import type { Hooks, MemorySettings, WindowSize } from '@/helpers/types'
-import type { ColorTheme, FeatureFlag } from '@/store/theme.ts'
+import type { FeatureFlag } from '@/store/theme.ts'
 
 // Settings object
 /*
@@ -35,7 +35,6 @@ export type AppSettings = {
 	max_concurrent_downloads: number
 	max_concurrent_writes: number
 
-	theme: ColorTheme
 	locale: string
 	default_page: 'home' | 'library'
 	collapsed_navigation: boolean
@@ -68,7 +67,15 @@ export type AppSettings = {
 	pending_update_toast_for_version: string | null
 	auto_download_updates: boolean | null
 
-	brand_color: string | null
+	color_theme: string
+	brand_color: string
+	active_theme_preset: string | null
+	theme_dir: string | null
+
+	sync_theme_with_system: boolean
+	dark_color_theme: string
+	dark_brand_color: string
+	dark_active_theme_preset: string | null
 
 	version: number
 }

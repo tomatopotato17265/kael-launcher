@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT theme FROM settings WHERE id = 0",
+  "describe": {
+    "columns": [
+      {
+        "name": "theme",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f05604bbc7d315c17fbdb8dc2a71cf0b59f6d4a6c1566d830784da9443c3f084"
+}

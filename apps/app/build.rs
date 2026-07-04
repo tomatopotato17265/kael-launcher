@@ -259,6 +259,17 @@ fn main() {
                     ),
             )
             .plugin(
+                "theming",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "theming_list_installed_themes",
+                        "theming_upload_theme",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
                 "utils",
                 InlinedPlugin::new()
                     .commands(&[

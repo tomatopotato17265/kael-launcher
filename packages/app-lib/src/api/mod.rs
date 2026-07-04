@@ -16,6 +16,7 @@ pub mod profile;
 pub mod server_address;
 pub mod settings;
 pub mod tags;
+pub mod theming;
 pub mod worlds;
 
 pub mod data {
@@ -26,8 +27,8 @@ pub mod data {
         LinkedModpackInfo, MemorySettings, ModLoader, ModrinthCredentials,
         Organization, OwnerType, PlayitAccount, ProcessMetadata, ProfileFile,
         Project, ProjectType, ProjectV3, SearchResult, SearchResults,
-        SearchResultsV3, Settings, TeamMember, Theme, User, UserFriend,
-        Version, WindowSize,
+        SearchResultsV3, Settings, TeamMember, User, UserFriend, Version,
+        WindowSize,
     };
     pub use ariadne::users::UserStatus;
 }
@@ -41,6 +42,7 @@ pub mod prelude {
         profile::{self, Profile, create},
         settings,
         state::ReleaseChannel,
+        theming,
         util::{
             io::{IOError, canonicalize},
             network::{is_network_metered, tcp_listen_any_loopback},

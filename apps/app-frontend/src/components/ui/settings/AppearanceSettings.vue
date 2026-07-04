@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { PaletteIcon } from '@kael/assets'
-import { ButtonStyled, Combobox, defineMessages, ThemeSelector, Toggle, useVIntl } from '@kael/ui'
+import { ButtonStyled, Combobox, defineMessages, Toggle, useVIntl } from '@kael/ui'
 import { ref, watch } from 'vue'
 
+import EditThemeModal from '@/components/ui/settings/EditThemeModal.vue'
 import { get, set } from '@/helpers/settings.ts'
 import { getOS } from '@/helpers/utils'
 import { useTheming } from '@/store/state'
-import type { ColorTheme, FeatureFlag } from '@/store/theme.ts'
+import type { FeatureFlag } from '@/store/theme.ts'
 
 const themeStore = useTheming()
 const { formatMessage } = useVIntl()
@@ -16,21 +16,17 @@ const skipUnknownPackWarningFlag: FeatureFlag = 'skip_unknown_pack_warning'
 const showPlayTimeFlag: FeatureFlag = 'show_instance_play_time'
 
 const messages = defineMessages({
-	colorThemeTitle: {
-		id: 'app.appearance-settings.color-theme.title',
-		defaultMessage: 'Color theme',
+	editThemeTitle: {
+		id: 'app.appearance-settings.edit-theme.title',
+		defaultMessage: 'Edit Theme',
 	},
-	colorThemeDescription: {
-		id: 'app.appearance-settings.color-theme.description',
-		defaultMessage: 'Select your preferred color theme for Modrinth App.',
+	editThemeDescription: {
+		id: 'app.appearance-settings.edit-theme.description',
+		defaultMessage: 'Customize the theme used throughout the app.',
 	},
-	editColorTitle: {
-		id: 'app.appearance-settings.brand-color.title',
-		defaultMessage: 'Edit theme',
-	},
-	editColorDescription: {
-		id: 'app.appearance-settings.brand-color.description',
-		defaultMessage: 'Customize the accent color used throughout the app.',
+	editThemeButton: {
+		id: 'app.appearance-settings.edit-theme.button',
+		defaultMessage: 'Edit Theme',
 	},
 	advancedRenderingTitle: {
 		id: 'app.appearance-settings.advanced-rendering.title',
@@ -114,6 +110,7 @@ const messages = defineMessages({
 
 const os = ref(await getOS())
 const settings = ref(await get())
+const themeModal = ref<InstanceType<typeof EditThemeModal>>()
 
 watch(
 	settings,
@@ -124,47 +121,20 @@ watch(
 )
 </script>
 <template>
-	<h2 class="m-0 text-lg font-semibold text-contrast">
-		{{ formatMessage(messages.colorThemeTitle) }}
-	</h2>
-	<p class="m-0 mt-1">{{ formatMessage(messages.colorThemeDescription) }}</p>
-
-	<ThemeSelector
-		:update-color-theme="
-			(theme: ColorTheme) => {
-				themeStore.setThemeState(theme)
-				settings.theme = theme
-			}
-		"
-		:current-theme="settings.theme"
-		:theme-options="themeStore.getThemeOptions()"
-		system-theme-color="system"
-	/>
-
-	<div class="mt-6 flex items-center justify-between">
+	<div class="flex items-center justify-between gap-4">
 		<div>
 			<h2 class="m-0 text-lg font-semibold text-contrast">
-				{{ formatMessage(messages.editColorTitle) }}
+				{{ formatMessage(messages.editThemeTitle) }}
 			</h2>
-			<p class="m-0 mt-1">{{ formatMessage(messages.editColorDescription) }}</p>
+			<p class="m-0 mt-1">{{ formatMessage(messages.editThemeDescription) }}</p>
 		</div>
 		<ButtonStyled>
-			<label class="button-like relative" for="brand-color-input">
-				<PaletteIcon :style="settings.brand_color ? { color: settings.brand_color } : {}" />
-				<input
-					id="brand-color-input"
-					type="color"
-					class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-					:value="settings.brand_color ?? '#7f51f5'"
-					@change="(e) => {
-						const color = (e.target as HTMLInputElement).value
-						settings.brand_color = color
-						themeStore.applyBrandColor(color)
-					}"
-				/>
-			</label>
+			<button @click="themeModal?.show()">
+				{{ formatMessage(messages.editThemeButton) }}
+			</button>
 		</ButtonStyled>
 	</div>
+	<EditThemeModal ref="themeModal" />
 
 	<div class="mt-6 flex items-center justify-between">
 		<div>

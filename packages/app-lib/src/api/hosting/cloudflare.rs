@@ -200,8 +200,12 @@ pub async fn create_server_records(
     target_host: &str,
     port: u16,
     reserved: &[String],
+    pinned_ipv4: Option<&str>,
 ) -> crate::Result<(String, Option<DnsRecordIds>)> {
-    let ipv4 = resolve_ipv4(target_host).await?;
+    let ipv4 = match pinned_ipv4 {
+        Some(ip) => ip.to_owned(),
+        None => resolve_ipv4(target_host).await?,
+    };
 
     match backend {
         DnsBackend::Worker {

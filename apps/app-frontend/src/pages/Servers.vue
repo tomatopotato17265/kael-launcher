@@ -304,6 +304,11 @@ function primaryAddress(server: HostedServer): string | null {
 							<button class="link-button" @click="copy(primaryAddress(server)!)">Copy</button>
 						</div>
 						<div v-else class="tunnel muted">No address yet — activate to create one.</div>
+						<div v-if="server.tunnel_url" class="tunnel advanced">
+							<span class="advanced-label">playit tunnel</span>
+							<span class="tunnel-url">{{ server.tunnel_url }}</span>
+							<button class="link-button" @click="copy(server.tunnel_url!)">Copy</button>
+						</div>
 					</div>
 					<div class="server-actions">
 						<ButtonStyled v-if="!isRunning(server.id)" color="green">
@@ -527,6 +532,15 @@ function primaryAddress(server: HostedServer): string | null {
 	&.secondary {
 		color: var(--color-secondary);
 		font-size: var(--font-size-sm);
+	}
+
+	&.advanced {
+		color: var(--color-secondary);
+		font-size: var(--font-size-sm);
+	}
+
+	.advanced-label {
+		flex-shrink: 0;
 	}
 }
 

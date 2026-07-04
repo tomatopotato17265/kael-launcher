@@ -55,18 +55,23 @@ async fn cleanup_orphans(state: &State) {
         .collect();
 
     if stale.is_empty() {
+        cleanup_stray_agents(state).await;
         return;
     }
+
+    let playit_secret = state
+        .directories
+        .playit_dir()
+        .join("agent-secret")
+        .to_string_lossy()
+        .to_string();
 
     tokio::task::spawn_blocking(move || {
         let mut system = sysinfo::System::new();
         system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
 
-        for (id, server_pid, agent_pid) in &stale {
-            for (pid, marker) in [
-                (server_pid, "server.jar"),
-                (agent_pid, "playitd"),
-            ] {
+        for (id, _server_pid, agent_pid) in &stale {
+            for (pid, marker) in [(agent_pid, "playitd")] {
                 let Some(pid) = pid else { continue };
                 let Ok(pid) = u32::try_from(*pid) else { continue };
 
@@ -81,6 +86,23 @@ async fn cleanup_orphans(state: &State) {
                     );
                     process.kill();
                 }
+            }
+        }
+
+        for (_, process) in system.processes() {
+            let cmd: Vec<String> = process
+                .cmd()
+                .iter()
+                .map(|part| part.to_string_lossy().into_owned())
+                .collect();
+            let is_playitd = cmd.iter().any(|part| part.contains("playitd"));
+            let uses_our_secret = cmd.iter().any(|part| part.contains(&playit_secret));
+            if is_playitd && uses_our_secret {
+                tracing::info!(
+                    "Killing stray playitd process {} using the launcher secret",
+                    process.pid()
+                );
+                process.kill();
             }
         }
     })
@@ -98,6 +120,44 @@ async fn cleanup_orphans(state: &State) {
             tracing::warn!("Failed to clear stale pids for server {id}: {e}");
         }
     }
+
+    cleanup_stray_agents(state).await;
+}
+
+/// Kills any `playitd` processes still running with this install's secret file.
+/// More than one daemon per secret makes playit report connected while tunnels
+/// stop forwarding reliably.
+async fn cleanup_stray_agents(state: &State) {
+    let playit_secret = state
+        .directories
+        .playit_dir()
+        .join("agent-secret")
+        .to_string_lossy()
+        .to_string();
+
+    tokio::task::spawn_blocking(move || {
+        let mut system = sysinfo::System::new();
+        system.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+
+        for (_, process) in system.processes() {
+            let cmd: Vec<String> = process
+                .cmd()
+                .iter()
+                .map(|part| part.to_string_lossy().into_owned())
+                .collect();
+            let is_playitd = cmd.iter().any(|part| part.contains("playitd"));
+            let uses_our_secret = cmd.iter().any(|part| part.contains(&playit_secret));
+            if is_playitd && uses_our_secret {
+                tracing::info!(
+                    "Killing stray playitd process {} using the launcher secret",
+                    process.pid()
+                );
+                process.kill();
+            }
+        }
+    })
+    .await
+    .ok();
 }
 
 /// Discards a playit account whose agent was deleted on playit.gg's side.
@@ -331,38 +391,95 @@ pub async fn ensure_tunnel(id: &str) -> crate::Result<String> {
             crate::ErrorKind::InputError(format!("Server {id} was not found"))
         })?;
 
-    let tunnel_url = match &server.tunnel_url {
-        Some(url) => url.clone(),
-        None => {
-            let account =
-                PlayitAccount::get(&state.pool).await?.ok_or_else(|| {
-                    crate::ErrorKind::InputError(
-                        "playit.gg has not been set up yet".to_string(),
-                    )
-                })?;
-
-            let agent_id =
-                resolve_agent_id(&state, id, &account.secret_key).await?;
-            let tunnel_id = playit::create_tunnel(
-                &account.secret_key,
-                &server.name,
-                &agent_id,
-                server.port,
+    let account =
+        PlayitAccount::get(&state.pool).await?.ok_or_else(|| {
+            crate::ErrorKind::InputError(
+                "playit.gg has not been set up yet".to_string(),
             )
-            .await?;
-            let url = playit::wait_for_tunnel_address(
-                &account.secret_key,
-                &tunnel_id,
-            )
-            .await?;
+        })?;
 
-            server.playit_tunnel_id = Some(tunnel_id);
-            server.tunnel_url = Some(url.clone());
-            server.modified = Utc::now().timestamp();
-            server.upsert(&state.pool).await?;
-            url
+    let agent_id =
+        playit::wait_for_agent_id(&account.secret_key).await?;
+
+    let endpoint = if let Some(tunnel_id) = &server.playit_tunnel_id {
+        let mut endpoint = None;
+        let mut recreate = false;
+
+        for _ in 0..3 {
+            let Some(tunnel) =
+                playit::get_tunnel(&account.secret_key, tunnel_id).await?
+            else {
+                recreate = true;
+                break;
+            };
+
+            if let Some(issue) =
+                playit::tunnel_routing_issue(&tunnel, &agent_id, server.port)
+            {
+                tracing::warn!(
+                    "playit tunnel {tunnel_id} is misconfigured ({issue}), recreating"
+                );
+                recreate = true;
+                break;
+            }
+
+            if let Some(current) = playit::parse_tunnel_endpoint(&tunnel) {
+                endpoint = Some(current);
+                break;
+            }
+
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
+
+        match endpoint {
+            Some(endpoint) => endpoint,
+            None => {
+                if recreate {
+                    tracing::info!(
+                        "Recreating playit tunnel {tunnel_id} for server {id}"
+                    );
+                } else {
+                    tracing::info!(
+                        "playit tunnel {tunnel_id} is no longer allocated, recreating"
+                    );
+                }
+                if let Err(e) = playit::delete_tunnel(
+                    &account.secret_key,
+                    tunnel_id,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        "Failed to delete stale playit tunnel {tunnel_id}: {e}"
+                    );
+                }
+                create_playit_tunnel(&state, id, &mut server, &account).await?
+            }
+        }
+    } else {
+        create_playit_tunnel(&state, id, &mut server, &account).await?
     };
+
+    if !wait_for_tunnel_forwarding(&endpoint.ip_hostname, endpoint.port).await {
+        tracing::warn!(
+            "Tunnel {} did not respond to status probes, restarting playit agent",
+            endpoint.url()
+        );
+        restart_shared_agent(&state, &account.secret_key, id).await?;
+        if !wait_for_tunnel_forwarding(&endpoint.ip_hostname, endpoint.port).await
+        {
+            return Err(crate::ErrorKind::OtherError(format!(
+                "The playit tunnel at {} is not forwarding traffic to your server. Try stopping and starting the server again, or set up playit.gg again from Settings.",
+                endpoint.url()
+            ))
+            .into());
+        }
+    }
+
+    let tunnel_url = endpoint.url();
+    server.tunnel_url = Some(tunnel_url.clone());
+    server.modified = Utc::now().timestamp();
+    server.upsert(&state.pool).await?;
 
     // When DNS is configured the kaelmc domain IS the server's address -
     // the app never shows the raw playit URL - so failing to create it
@@ -378,12 +495,9 @@ pub async fn ensure_tunnel(id: &str) -> crate::Result<String> {
         // pointed at the current tunnel and renews the subdomain's
         // ownership lease. Direct mode only creates missing domains.
         if server.custom_domain.is_none() || is_worker {
-            let (host, port) = match tunnel_url.rsplit_once(':') {
-                Some((host, port)) => {
-                    (host, port.parse().unwrap_or(DEFAULT_PORT))
-                }
-                None => (tunnel_url.as_str(), DEFAULT_PORT),
-            };
+            let dns_host = endpoint.dns_resolve_host();
+            let port = endpoint.port;
+            let pinned_ipv4 = endpoint.pinned_ipv4();
 
             // Domains owned by the user's other servers are off-limits
             // even while those servers are offline
@@ -409,9 +523,10 @@ pub async fn ensure_tunnel(id: &str) -> crate::Result<String> {
                 match cloudflare::create_server_records(
                     &backend,
                     &claim_name,
-                    host,
+                    dns_host,
                     port,
                     &reserved,
+                    pinned_ipv4,
                 )
                 .await
                 {
@@ -444,7 +559,35 @@ pub async fn ensure_tunnel(id: &str) -> crate::Result<String> {
         }
     }
 
-    Ok(server.custom_domain.clone().unwrap_or(tunnel_url))
+    Ok(server
+        .custom_domain
+        .clone()
+        .unwrap_or(tunnel_url))
+}
+
+async fn create_playit_tunnel(
+    state: &State,
+    id: &str,
+    server: &mut HostedServer,
+    account: &PlayitAccount,
+) -> crate::Result<playit::TunnelEndpoint> {
+    let agent_id =
+        resolve_agent_id(state, id, &account.secret_key).await?;
+    let tunnel_id = playit::create_tunnel(
+        &account.secret_key,
+        &server.name,
+        &agent_id,
+        server.port,
+    )
+    .await?;
+    let endpoint = playit::wait_for_tunnel_endpoint(
+        &account.secret_key,
+        &tunnel_id,
+    )
+    .await?;
+
+    server.playit_tunnel_id = Some(tunnel_id);
+    Ok(endpoint)
 }
 
 pub async fn start_server(id: String) -> crate::Result<()> {
@@ -487,6 +630,17 @@ pub async fn start_server(id: String) -> crate::Result<()> {
 
     let secret_path = write_secret_file(&state, &account.secret_key).await?;
 
+    if !state.hosting_manager.has_shared_agent().await {
+        cleanup_stray_agents(&state).await;
+        let agent_child = spawn_daemon(&daemon_path, &secret_path, &id)?;
+        state
+            .hosting_manager
+            .set_shared_agent(agent_child)
+            .await;
+    }
+
+    playit::wait_for_agent_id(&account.secret_key).await?;
+
     let mut server_command = Command::new(&java_path);
     server_command
         .current_dir(&directory)
@@ -503,14 +657,11 @@ pub async fn start_server(id: String) -> crate::Result<()> {
     capture_logs(&id, server_child.stdout.take());
     capture_logs(&id, server_child.stderr.take());
 
-    let agent_child = spawn_daemon(&daemon_path, &secret_path, &id)?;
-
     let server_pid = server_child.id().map(i64::from);
-    let agent_pid = agent_child.id().map(i64::from);
+    let agent_pid = state.hosting_manager.shared_agent_pid().await;
 
-    state
-        .hosting_manager
-        .insert(id.clone(), server_child, agent_child);
+    state.hosting_manager.insert(id.clone(), server_child);
+    SERVER_STARTED.insert(id.clone(), std::time::Instant::now());
 
     if let Err(e) =
         HostedServer::set_pids(&id, server_pid, agent_pid, &state.pool).await
@@ -522,6 +673,7 @@ pub async fn start_server(id: String) -> crate::Result<()> {
     // the UI would treat it as active and every later Activate would
     // short-circuit on is_running without ever fixing the tunnel
     if let Err(e) = ensure_tunnel(&id).await {
+        SERVER_STARTED.remove(&id);
         let _ = state.hosting_manager.stop(&id).await;
         let _ = HostedServer::set_pids(&id, None, None, &state.pool).await;
         return Err(e);
@@ -585,7 +737,7 @@ async fn resolve_agent_id(
     id: &str,
     secret: &str,
 ) -> crate::Result<String> {
-    if state.hosting_manager.is_running(id) {
+    if state.hosting_manager.has_shared_agent().await {
         let agent_id = playit::wait_for_agent_id(secret).await?;
         rename_agent_best_effort(secret, &agent_id).await;
         return Ok(agent_id);
@@ -593,6 +745,7 @@ async fn resolve_agent_id(
 
     let daemon_path = agent::ensure_playit_daemon(None).await?;
     let secret_path = write_secret_file(state, secret).await?;
+    cleanup_stray_agents(state).await;
     let mut child = spawn_daemon(&daemon_path, &secret_path, id)?;
 
     let result = playit::wait_for_agent_id(secret).await;
@@ -617,6 +770,7 @@ async fn rename_agent_best_effort(secret: &str, agent_id: &str) {
 pub async fn stop_server(id: String) -> crate::Result<()> {
     let state = State::get().await?;
     state.hosting_manager.stop(&id).await?;
+    SERVER_STARTED.remove(&id);
 
     if let Err(e) = HostedServer::set_pids(&id, None, None, &state.pool).await {
         tracing::warn!("Failed to clear pids for server {id}: {e}");
@@ -671,136 +825,236 @@ static LAST_WEDGE_RESTART: std::sync::LazyLock<
 const WEDGE_RESTART_COOLDOWN: std::time::Duration =
     std::time::Duration::from_secs(60);
 
+static SERVER_STARTED: std::sync::LazyLock<
+    dashmap::DashMap<String, std::time::Instant>,
+> = std::sync::LazyLock::new(dashmap::DashMap::new);
+const SERVER_STARTUP_GRACE: std::time::Duration =
+    std::time::Duration::from_secs(90);
+
+static LAST_DAEMON_RESTART: std::sync::LazyLock<
+    std::sync::Mutex<Option<std::time::Instant>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(None));
+const DAEMON_RESTART_COOLDOWN: std::time::Duration =
+    std::time::Duration::from_secs(60);
+
 async fn heal_daemons(state: &State, ids: &[String]) {
+    if ids.is_empty() {
+        return;
+    }
+
+    if LAST_DAEMON_RESTART
+        .lock()
+        .ok()
+        .and_then(|guard| *guard)
+        .is_some_and(|t| t.elapsed() < DAEMON_RESTART_COOLDOWN)
+    {
+        return;
+    }
+
+    let daemon_exited = state.hosting_manager.shared_agent_needs_restart().await;
+    let mut daemon_wedged = false;
+
     for id in ids {
-        let daemon_exited = state.hosting_manager.agent_needs_restart(id);
+        if daemon_exited {
+            break;
+        }
 
-        let mut daemon_wedged = false;
-        if !daemon_exited
-            && let Ok(Some(server)) = HostedServer::get(id, &state.pool).await
-            && let Some(tunnel_url) = &server.tunnel_url
-            && let Some((host, port_str)) = tunnel_url.rsplit_once(':')
-            && let Ok(port) = port_str.parse::<u16>()
+        if SERVER_STARTED
+            .get(id)
+            .is_some_and(|t| t.elapsed() < SERVER_STARTUP_GRACE)
         {
-            if minecraft_responds(host, port).await {
-                TUNNEL_STRIKES.remove(id);
-            } else if minecraft_responds("127.0.0.1", server.port).await {
-                // The server answers locally but not through the tunnel, so
-                // the daemon's forwarding is broken even though the process
-                // is still alive
-                let strikes = {
-                    let mut entry =
-                        TUNNEL_STRIKES.entry(id.clone()).or_insert(0);
-                    *entry += 1;
-                    *entry
-                };
+            continue;
+        }
 
-                if strikes >= TUNNEL_STRIKE_LIMIT {
-                    TUNNEL_STRIKES.remove(id);
+        let Ok(Some(server)) = HostedServer::get(id, &state.pool).await else {
+            continue;
+        };
 
-                    let recently_restarted = LAST_WEDGE_RESTART
-                        .get(id)
-                        .is_some_and(|t| t.elapsed() < WEDGE_RESTART_COOLDOWN);
-                    if recently_restarted {
+        let playit_probe = server.tunnel_url.as_ref().and_then(|tunnel_url| {
+            let (host, port_str) = tunnel_url.rsplit_once(':')?;
+            let port = port_str.parse().ok()?;
+            Some((host.to_owned(), port))
+        });
+
+        let custom_probe = if let Some(domain) = &server.custom_domain {
+            resolve_custom_domain(domain).await
+        } else {
+            None
+        };
+
+        let playit_ok = if let Some((host, port)) = &playit_probe {
+            Some(minecraft_responds(host, *port).await)
+        } else {
+            None
+        };
+
+        let custom_ok = if let Some((host, port)) = &custom_probe {
+            Some(minecraft_responds(host, *port).await)
+        } else {
+            None
+        };
+
+        let tunnel_ok = custom_ok.or(playit_ok).unwrap_or(false);
+
+        if playit_ok == Some(true)
+            && custom_ok == Some(false)
+            && let (Some((playit_host, playit_port)), Some((custom_host, custom_port))) =
+                (&playit_probe, &custom_probe)
+            && let Some(domain) = &server.custom_domain
+        {
+            tracing::warn!(
+                "Tunnel for server {id} works via playit ({playit_host}:{playit_port}) but not via {domain} ({custom_host}:{custom_port}) — DNS may be stale or misconfigured"
+            );
+        }
+
+        if tunnel_ok {
+            TUNNEL_STRIKES.remove(id);
+            continue;
+        }
+
+        if !minecraft_responds("127.0.0.1", server.port).await {
+            continue;
+        }
+
+        let strikes = {
+            let mut entry = TUNNEL_STRIKES.entry(id.clone()).or_insert(0);
+            *entry += 1;
+            *entry
+        };
+
+        if strikes < TUNNEL_STRIKE_LIMIT {
+            continue;
+        }
+
+        TUNNEL_STRIKES.remove(id);
+
+        let recently_restarted = LAST_WEDGE_RESTART
+            .get(id)
+            .is_some_and(|t| t.elapsed() < WEDGE_RESTART_COOLDOWN);
+        if recently_restarted {
+            tracing::warn!(
+                "Tunnel for server {id} is still unresponsive after a recent daemon restart; waiting before restarting again"
+            );
+            continue;
+        }
+
+        LAST_WEDGE_RESTART.insert(id.clone(), std::time::Instant::now());
+        daemon_wedged = true;
+        break;
+    }
+
+    if !daemon_exited && !daemon_wedged {
+        return;
+    }
+
+    let restart = async {
+        let account = PlayitAccount::get(&state.pool).await?.ok_or_else(|| {
+            crate::Error::from(crate::ErrorKind::InputError(
+                "playit.gg has not been set up".to_string(),
+            ))
+        })?;
+        let daemon_path = agent::ensure_playit_daemon(None).await?;
+        let secret_path = write_secret_file(state, &account.secret_key).await?;
+        cleanup_stray_agents(state).await;
+        let child = spawn_daemon(&daemon_path, &secret_path, "shared")?;
+        crate::Result::Ok(child)
+    };
+
+    match restart.await {
+        Ok(child) => {
+            tracing::info!(
+                "Restarted the shared playit daemon ({})",
+                if daemon_exited {
+                    "previous daemon had exited"
+                } else {
+                    "tunnel stopped forwarding while servers were still up"
+                }
+            );
+            state.hosting_manager.replace_shared_agent(child).await;
+            if let Ok(mut guard) = LAST_DAEMON_RESTART.lock() {
+                *guard = Some(std::time::Instant::now());
+            }
+            if let Some(agent_pid) =
+                state.hosting_manager.shared_agent_pid().await
+                && let Ok(running) = HostedServer::get_all(&state.pool).await
+            {
+                for server in running
+                    .into_iter()
+                    .filter(|s| ids.contains(&s.id))
+                {
+                    if let Err(e) = HostedServer::set_pids(
+                        &server.id,
+                        server.server_pid,
+                        Some(agent_pid),
+                        &state.pool,
+                    )
+                    .await
+                    {
                         tracing::warn!(
-                            "Tunnel for server {id} is still unresponsive after a recent daemon restart; waiting before restarting again"
+                            "Failed to update agent pid for server {}: {e}",
+                            server.id
                         );
-                    } else {
-                        LAST_WEDGE_RESTART
-                            .insert(id.clone(), std::time::Instant::now());
-                        daemon_wedged = true;
                     }
                 }
             }
         }
-
-        if !daemon_exited && !daemon_wedged {
-            continue;
-        }
-
-        let restart = async {
-            let account =
-                PlayitAccount::get(&state.pool).await?.ok_or_else(|| {
-                    crate::Error::from(crate::ErrorKind::InputError(
-                        "playit.gg has not been set up".to_string(),
-                    ))
-                })?;
-            let daemon_path = agent::ensure_playit_daemon(None).await?;
-            let secret_path =
-                write_secret_file(state, &account.secret_key).await?;
-            let child = spawn_daemon(&daemon_path, &secret_path, id)?;
-            crate::Result::Ok(child)
-        };
-
-        match restart.await {
-            Ok(child) => {
-                tracing::info!(
-                    "Restarted the playit daemon for server {id} ({})",
-                    if daemon_exited {
-                        "previous daemon had exited"
-                    } else {
-                        "tunnel stopped forwarding while the server was still up"
-                    }
-                );
-                state.hosting_manager.replace_agent(id, child);
-            }
-            Err(e) => {
-                tracing::warn!(
-                    "Failed to restart the playit daemon for server {id}: {e}"
-                );
-            }
+        Err(e) => {
+            tracing::warn!("Failed to restart the shared playit daemon: {e}");
         }
     }
 }
 
-/// Performs a real Minecraft status ping - TCP connect, handshake, status
-/// request, then waits for any response bytes. A bare TCP connect is not
-/// enough: playit's ingress accepts connections even when the agent behind
-/// them is dead, and only resets once data flows.
-async fn minecraft_responds(host: &str, port: u16) -> bool {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-    fn write_varint(buf: &mut Vec<u8>, value: u32) {
-        let mut value = value;
-        loop {
-            let byte = (value & 0x7F) as u8;
-            value >>= 7;
-            if value == 0 {
-                buf.push(byte);
-                break;
-            }
-            buf.push(byte | 0x80);
-        }
-    }
-
-    let probe = async {
-        let mut stream =
-            tokio::net::TcpStream::connect((host, port)).await.ok()?;
-
-        let mut handshake = vec![0x00];
-        write_varint(&mut handshake, 0);
-        write_varint(&mut handshake, host.len() as u32);
-        handshake.extend_from_slice(host.as_bytes());
-        handshake.extend_from_slice(&port.to_be_bytes());
-        write_varint(&mut handshake, 1);
-
-        let mut packet = Vec::new();
-        write_varint(&mut packet, handshake.len() as u32);
-        packet.extend_from_slice(&handshake);
-        packet.extend_from_slice(&[0x01, 0x00]);
-
-        stream.write_all(&packet).await.ok()?;
-
-        let mut buf = [0u8; 1];
-        let read = stream.read(&mut buf).await.ok()?;
-        (read > 0).then_some(())
-    };
-
-    tokio::time::timeout(std::time::Duration::from_secs(4), probe)
+async fn resolve_custom_domain(domain: &str) -> Option<(String, u16)> {
+    let (host, port) =
+        crate::api::server_address::parse_server_address(domain).ok()?;
+    crate::api::server_address::resolve_server_address(host, port)
         .await
         .ok()
-        .flatten()
-        .is_some()
+}
+
+/// Performs a proper Minecraft status ping. A bare TCP connect is not enough:
+/// playit's ingress accepts connections even when the agent behind them is
+/// dead, and only resets once data flows.
+async fn minecraft_responds(host: &str, port: u16) -> bool {
+    const STATUS_PROTOCOL_VERSION: usize = 776;
+
+    let Ok(conn) = async_minecraft_ping::ConnectionConfig::build(host)
+        .with_port(port)
+        .with_protocol_version(STATUS_PROTOCOL_VERSION)
+        .with_timeout(std::time::Duration::from_secs(3))
+        .connect()
+        .await
+    else {
+        return false;
+    };
+
+    conn.status().await.is_ok()
+}
+
+async fn wait_for_tunnel_forwarding(host: &str, port: u16) -> bool {
+    for _ in 0..15 {
+        if minecraft_responds(host, port).await {
+            return true;
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
+
+    false
+}
+
+async fn restart_shared_agent(
+    state: &State,
+    secret: &str,
+    id: &str,
+) -> crate::Result<()> {
+    let daemon_path = agent::ensure_playit_daemon(None).await?;
+    let secret_path = write_secret_file(state, secret).await?;
+    cleanup_stray_agents(state).await;
+    let child = spawn_daemon(&daemon_path, &secret_path, id)?;
+    state.hosting_manager.replace_shared_agent(child).await;
+    playit::wait_for_agent_id(secret).await?;
+    Ok(())
 }
 
 pub async fn get_logs(id: String) -> crate::Result<Vec<String>> {

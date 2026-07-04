@@ -1,0 +1,25 @@
+# kaelmc-dns Cloudflare Worker
+#
+# Deploy from this directory:
+#   wrangler secret put CF_API_TOKEN   # Zone.DNS edit on kaelmc.net
+#   wrangler deploy
+#
+# Required bindings (set in Cloudflare dashboard or below):
+#   CF_API_TOKEN — secret; API token scoped to Zone.DNS edit
+#   ZONE_ID      — Cloudflare zone id for kaelmc.net
+#   DOMAIN       — apex domain (default kaelmc.net)
+#   OWNERS       — KV namespace mapping subdomain -> install owner key
+
+name = "kaelmc-dns"
+main = "kaelmc-dns.js"
+compatibility_date = "2024-01-01"
+
+routes = [{ pattern = "dns.kaelmc.net/*", zone_name = "kaelmc.net" }]
+
+[vars]
+DOMAIN = "kaelmc.net"
+# ZONE_ID = "your-zone-id-here"
+
+# [[kv_namespaces]]
+# binding = "OWNERS"
+# id = "your-kv-namespace-id"

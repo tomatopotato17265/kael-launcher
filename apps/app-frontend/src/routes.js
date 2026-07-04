@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
+import { hasBrowseScrollPosition } from '@/helpers/browse-scroll'
 import * as Pages from '@/pages'
 import * as Instance from '@/pages/instance'
 import * as Library from '@/pages/library'
@@ -226,6 +227,9 @@ export default new createRouter({
 	linkExactActiveClass: 'router-link-exact-active',
 	scrollBehavior(to, from) {
 		if (to.path === from.path) return
+		// Entering a project page resets its own scroll once loaded, avoiding a visible flash on the outgoing page.
+		if (hasBrowseScrollPosition(to.fullPath)) return false
+		if (to.path.startsWith('/project') && !from.path.startsWith('/project')) return false
 		// Sometimes Vue's scroll behavior is not working as expected, so we need to manually scroll to top (especially on Linux)
 		document.querySelector('.app-viewport')?.scrollTo(0, 0)
 		return {

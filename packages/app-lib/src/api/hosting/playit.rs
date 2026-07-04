@@ -284,28 +284,43 @@ pub async fn wait_for_agent_id(secret: &str) -> crate::Result<String> {
     .into())
 }
 
-pub async fn wait_for_tunnel_address(
-    secret: &str,
-    tunnel_id: &str,
-) -> crate::Result<String> {
-    for _ in 0..30 {
-        if let Some(address) = tunnel_address(secret, tunnel_id).await? {
-            return Ok(address);
-        }
-
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-    }
-
-    Err(crate::ErrorKind::OtherError(
-        "Timed out waiting for the playit tunnel to be allocated".to_string(),
-    )
-    .into())
+/// Current playit tunnel allocation used for connectivity probes and DNS.
+#[derive(Debug, Clone)]
+pub struct TunnelEndpoint {
+    pub ip_hostname: String,
+    pub assigned_domain: Option<String>,
+    pub port: u16,
+    pub tunnel_ip: Option<String>,
+    pub static_ip4: Option<String>,
 }
 
-async fn tunnel_address(
+impl TunnelEndpoint {
+    pub fn url(&self) -> String {
+        format!("{}:{}", self.ip_hostname, self.port)
+    }
+
+    /// Hostname whose A record should be resolved when playit does not supply
+    /// a pinned IPv4 directly.
+    pub fn dns_resolve_host(&self) -> &str {
+        &self.ip_hostname
+    }
+
+    /// IPv4 from playit's alloc when available, avoiding a DoH round-trip.
+    pub fn pinned_ipv4(&self) -> Option<&str> {
+        if let Some(ip) = self.static_ip4.as_deref()
+            && !ip.is_empty()
+        {
+            return Some(ip);
+        }
+
+        self.tunnel_ip.as_deref().filter(|ip| ip.contains('.'))
+    }
+}
+
+pub async fn get_tunnel(
     secret: &str,
     tunnel_id: &str,
-) -> crate::Result<Option<String>> {
+) -> crate::Result<Option<serde_json::Value>> {
     let list: serde_json::Value = call(
         "/tunnels/list",
         Some(secret),
@@ -317,37 +332,145 @@ async fn tunnel_address(
         return Ok(None);
     };
 
-    let Some(tunnel) = tunnels
+    Ok(tunnels
         .iter()
         .find(|t| t.get("id").and_then(|i| i.as_str()) == Some(tunnel_id))
-        .or_else(|| tunnels.first())
-    else {
-        return Ok(None);
-    };
+        .cloned())
+}
 
-    let alloc = tunnel.get("alloc");
-    let status = alloc.and_then(|a| a.get("status")).and_then(|s| s.as_str());
+pub async fn get_tunnel_endpoint(
+    secret: &str,
+    tunnel_id: &str,
+) -> crate::Result<Option<TunnelEndpoint>> {
+    Ok(get_tunnel(secret, tunnel_id)
+        .await?
+        .and_then(|tunnel| parse_tunnel_endpoint(&tunnel)))
+}
 
-    if status != Some("allocated") {
-        return Ok(None);
+/// Returns why a tunnel cannot route traffic, if playit reports one.
+pub fn tunnel_routing_issue(
+    tunnel: &serde_json::Value,
+    agent_id: &str,
+    local_port: u16,
+) -> Option<String> {
+    if tunnel.get("active").and_then(|v| v.as_bool()) == Some(false) {
+        let reason = tunnel
+            .get("disabled_reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("inactive");
+        return Some(format!("tunnel inactive ({reason})"));
     }
 
-    let data = alloc.and_then(|a| a.get("data"));
-    let host = tunnel
+    if tunnel.get("agent_over_limit").and_then(|v| v.as_bool()) == Some(true) {
+        return Some("playit agent is over its tunnel limit".to_string());
+    }
+
+    let origin = tunnel.get("origin")?;
+    if origin.get("type").and_then(|t| t.as_str()) != Some("agent") {
+        return Some("tunnel origin is not bound to an agent".to_string());
+    }
+
+    let data = origin.get("data")?;
+    let origin_agent = data.get("agent_id").and_then(|id| id.as_str())?;
+    if origin_agent != agent_id {
+        return Some(format!(
+            "tunnel points at agent {origin_agent}, but the running agent is {agent_id}"
+        ));
+    }
+
+    let origin_port = data
+        .get("local_port")
+        .and_then(|p| p.as_u64())
+        .and_then(|p| u16::try_from(p).ok());
+    if origin_port != Some(local_port) {
+        return Some(format!(
+            "tunnel forwards to port {:?}, expected {local_port}",
+            origin_port
+        ));
+    }
+
+    if parse_tunnel_endpoint(tunnel).is_none() {
+        return Some("tunnel has no public allocation".to_string());
+    }
+
+    None
+}
+
+pub async fn wait_for_tunnel_endpoint(
+    secret: &str,
+    tunnel_id: &str,
+) -> crate::Result<TunnelEndpoint> {
+    for _ in 0..30 {
+        if let Some(endpoint) = get_tunnel_endpoint(secret, tunnel_id).await? {
+            return Ok(endpoint);
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    }
+
+    Err(crate::ErrorKind::OtherError(
+        "Timed out waiting for the playit tunnel to be allocated".to_string(),
+    )
+    .into())
+}
+
+pub async fn wait_for_tunnel_address(
+    secret: &str,
+    tunnel_id: &str,
+) -> crate::Result<String> {
+    Ok(wait_for_tunnel_endpoint(secret, tunnel_id).await?.url())
+}
+
+pub fn parse_tunnel_endpoint(tunnel: &serde_json::Value) -> Option<TunnelEndpoint> {
+    let alloc = tunnel.get("alloc")?;
+    if alloc.get("status").and_then(|s| s.as_str()) != Some("allocated") {
+        return None;
+    }
+
+    let data = alloc.get("data")?;
+    let ip_hostname = data
+        .get("ip_hostname")
+        .and_then(|n| n.as_str())
+        .or_else(|| {
+            data.get("assigned_domain")
+                .and_then(|n| n.as_str())
+        })
+        .or_else(|| {
+            tunnel
+                .get("domain")
+                .and_then(|d| d.get("name"))
+                .and_then(|n| n.as_str())
+        })?;
+    let port = data
+        .get("port_start")
+        .and_then(|p| p.as_u64())
+        .and_then(|p| u16::try_from(p).ok())?;
+
+    let assigned_domain = tunnel
         .get("domain")
         .and_then(|d| d.get("name"))
         .and_then(|n| n.as_str())
+        .map(str::to_owned)
         .or_else(|| {
-            data.and_then(|d| d.get("assigned_domain"))
+            data.get("assigned_domain")
                 .and_then(|n| n.as_str())
+                .map(str::to_owned)
         });
-    let port = data
-        .and_then(|d| d.get("port_start"))
-        .and_then(|p| p.as_u64());
 
-    match (host, port) {
-        (Some(host), Some(port)) => Ok(Some(format!("{host}:{port}"))),
-        (Some(host), None) => Ok(Some(host.to_string())),
-        _ => Ok(None),
-    }
+    let static_ip4 = data
+        .get("static_ip4")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
+    let tunnel_ip = data
+        .get("tunnel_ip")
+        .and_then(|v| v.as_str())
+        .map(str::to_owned);
+
+    Some(TunnelEndpoint {
+        ip_hostname: ip_hostname.to_owned(),
+        assigned_domain,
+        port,
+        tunnel_ip,
+        static_ip4,
+    })
 }

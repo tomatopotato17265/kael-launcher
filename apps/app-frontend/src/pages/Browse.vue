@@ -29,7 +29,7 @@ import {
 import { useQueryClient } from '@tanstack/vue-query'
 import { convertFileSrc } from '@tauri-apps/api/core'
 import type { Ref } from 'vue'
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { LocationQuery } from 'vue-router'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
@@ -41,6 +41,7 @@ import {
 	get_search_results_v3,
 	get_version_many,
 } from '@/helpers/cache.js'
+import { takeBrowseScrollPosition } from '@/helpers/browse-scroll'
 import { profile_listener } from '@/helpers/events.js'
 import { get_loader_versions as getLoaderManifest } from '@/helpers/metadata'
 import {
@@ -953,6 +954,17 @@ const bothSourcesActive = computed(
 	() => cfEnabled.value && sourceModrinth.value && sourceCurseforge.value,
 )
 
+switch (route.query.src) {
+	case 'curseforge':
+		sourceModrinth.value = false
+		sourceCurseforge.value = true
+		break
+	case 'both':
+		sourceModrinth.value = true
+		sourceCurseforge.value = true
+		break
+}
+
 function toggleSource(source: 'modrinth' | 'curseforge') {
 	const on = source === 'modrinth' ? sourceModrinth : sourceCurseforge
 	const other = source === 'modrinth' ? sourceCurseforge : sourceModrinth
@@ -1235,6 +1247,13 @@ const searchState = useBrowseSearch({
 		wid: effectiveServerWorldId.value || undefined,
 		ai: instanceHideInstalled.value ? 'true' : undefined,
 		shi: serverHideInstalled.value ? 'true' : undefined,
+		src: !cfEnabled.value
+			? undefined
+			: bothSourcesActive.value
+				? 'both'
+				: sourceCurseforge.value
+					? 'curseforge'
+					: undefined,
 	}),
 })
 
@@ -1278,6 +1297,15 @@ if (instance.value?.game_version) {
 
 await searchState.refreshSearch()
 
+const savedScrollPosition = takeBrowseScrollPosition(route.fullPath)
+if (savedScrollPosition !== undefined) {
+	nextTick(() => {
+		requestAnimationFrame(() => {
+			document.querySelector('.app-viewport')?.scrollTo(0, savedScrollPosition)
+		})
+	})
+}
+
 type UnlistenFn = () => void
 
 let isUnmounted = false
@@ -1319,7 +1347,7 @@ onUnmounted(() => {
 })
 
 function getProjectBrowseQuery() {
-	if (!installContext.value) return undefined
+	if (!installContext.value) return { b: route.fullPath }
 	return {
 		...route.query,
 		b: route.fullPath,

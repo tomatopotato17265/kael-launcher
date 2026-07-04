@@ -11,7 +11,6 @@ pub struct Settings {
     pub max_concurrent_downloads: usize,
     pub max_concurrent_writes: usize,
 
-    pub theme: Theme,
     pub locale: String,
     pub default_page: DefaultPage,
     pub collapsed_navigation: bool,
@@ -19,7 +18,22 @@ pub struct Settings {
     pub advanced_rendering: bool,
     pub native_decorations: bool,
     pub toggle_sidebar: bool,
-    pub brand_color: Option<String>,
+
+    /// Primary theme config: hex seed driving the surface-shade ramp and
+    /// base-mode (light/dark) selection. Used as-is when
+    /// `sync_theme_with_system` is false, or as the "light" variant when true.
+    pub color_theme: String,
+    pub brand_color: String,
+    /// Id of the selected preset/installed theme, or `None` for custom hex values.
+    pub active_theme_preset: Option<String>,
+    /// Custom themes folder. `None` means the default `config_dir/themes`.
+    pub theme_dir: Option<String>,
+
+    /// Dark-variant theme config, only meaningful when `sync_theme_with_system` is true.
+    pub sync_theme_with_system: bool,
+    pub dark_color_theme: String,
+    pub dark_brand_color: String,
+    pub dark_active_theme_preset: Option<String>,
 
     pub telemetry: bool,
     pub discord_rpc: bool,
@@ -67,7 +81,7 @@ pub enum FeatureFlag {
 }
 
 impl Settings {
-    const CURRENT_VERSION: usize = 4;
+    const CURRENT_VERSION: usize = 5;
 
     pub async fn get(
         exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
@@ -76,7 +90,7 @@ impl Settings {
             "
             SELECT
                 max_concurrent_writes, max_concurrent_downloads,
-                theme, locale, default_page, collapsed_navigation, hide_nametag_skins_page, advanced_rendering, native_decorations,
+                locale, default_page, collapsed_navigation, hide_nametag_skins_page, advanced_rendering, native_decorations,
                 discord_rpc, developer_mode, telemetry, personalized_ads,
                 onboarded,
                 json(extra_launch_args) extra_launch_args, json(custom_env_vars) custom_env_vars,
@@ -84,7 +98,8 @@ impl Settings {
                 hook_pre_launch, hook_wrapper, hook_post_exit,
                 custom_dir, prev_custom_dir, migrated, json(feature_flags) feature_flags, toggle_sidebar,
                 skipped_update, pending_update_toast_for_version, auto_download_updates,
-                brand_color,
+                brand_color, color_theme, dark_color_theme, dark_brand_color,
+                sync_theme_with_system, active_theme_preset, dark_active_theme_preset, theme_dir,
                 version
             FROM settings
             "
@@ -95,7 +110,6 @@ impl Settings {
         Ok(Self {
             max_concurrent_downloads: res.max_concurrent_downloads as usize,
             max_concurrent_writes: res.max_concurrent_writes as usize,
-            theme: Theme::from_string(&res.theme),
             locale: res.locale,
             default_page: DefaultPage::from_string(&res.default_page),
             collapsed_navigation: res.collapsed_navigation == 1,
@@ -103,7 +117,6 @@ impl Settings {
             advanced_rendering: res.advanced_rendering == 1,
             native_decorations: res.native_decorations == 1,
             toggle_sidebar: res.toggle_sidebar == 1,
-            brand_color: res.brand_color,
             telemetry: res.telemetry == 1,
             discord_rpc: res.discord_rpc == 1,
             developer_mode: res.developer_mode == 1,
@@ -145,6 +158,16 @@ impl Settings {
             pending_update_toast_for_version: res
                 .pending_update_toast_for_version,
             auto_download_updates: res.auto_download_updates.map(|x| x == 1),
+            brand_color: res
+                .brand_color
+                .unwrap_or_else(|| "#874EFE".to_string()),
+            color_theme: res.color_theme,
+            active_theme_preset: res.active_theme_preset,
+            theme_dir: res.theme_dir,
+            sync_theme_with_system: res.sync_theme_with_system == 1,
+            dark_color_theme: res.dark_color_theme,
+            dark_brand_color: res.dark_brand_color,
+            dark_active_theme_preset: res.dark_active_theme_preset,
             version: res.version as usize,
         })
     }
@@ -155,7 +178,6 @@ impl Settings {
     ) -> crate::Result<()> {
         let max_concurrent_writes = self.max_concurrent_writes as i32;
         let max_concurrent_downloads = self.max_concurrent_downloads as i32;
-        let theme = self.theme.as_str();
         let default_page = self.default_page.as_str();
         let extra_launch_args = serde_json::to_string(&self.extra_launch_args)?;
         let custom_env_vars = serde_json::to_string(&self.custom_env_vars)?;
@@ -169,51 +191,56 @@ impl Settings {
                 max_concurrent_writes = $1,
                 max_concurrent_downloads = $2,
 
-                theme = $3,
-                locale = $4,
-                default_page = $5,
-                collapsed_navigation = $6,
-                advanced_rendering = $7,
-                native_decorations = $8,
+                locale = $3,
+                default_page = $4,
+                collapsed_navigation = $5,
+                advanced_rendering = $6,
+                native_decorations = $7,
 
-                discord_rpc = $9,
-                developer_mode = $10,
-                telemetry = $11,
-                personalized_ads = $12,
+                discord_rpc = $8,
+                developer_mode = $9,
+                telemetry = $10,
+                personalized_ads = $11,
 
-                onboarded = $13,
+                onboarded = $12,
 
-                extra_launch_args = jsonb($14),
-                custom_env_vars = jsonb($15),
-                mc_memory_max = $16,
-                mc_force_fullscreen = $17,
-                mc_game_resolution_x = $18,
-                mc_game_resolution_y = $19,
-                hide_on_process_start = $20,
+                extra_launch_args = jsonb($13),
+                custom_env_vars = jsonb($14),
+                mc_memory_max = $15,
+                mc_force_fullscreen = $16,
+                mc_game_resolution_x = $17,
+                mc_game_resolution_y = $18,
+                hide_on_process_start = $19,
 
-                hook_pre_launch = $21,
-                hook_wrapper = $22,
-                hook_post_exit = $23,
+                hook_pre_launch = $20,
+                hook_wrapper = $21,
+                hook_post_exit = $22,
 
-                custom_dir = $24,
-                prev_custom_dir = $25,
-                migrated = $26,
+                custom_dir = $23,
+                prev_custom_dir = $24,
+                migrated = $25,
 
-                toggle_sidebar = $27,
-                feature_flags = $28,
-                hide_nametag_skins_page = $29,
+                toggle_sidebar = $26,
+                feature_flags = $27,
+                hide_nametag_skins_page = $28,
 
-                skipped_update = $30,
-                pending_update_toast_for_version = $31,
-                auto_download_updates = $32,
+                skipped_update = $29,
+                pending_update_toast_for_version = $30,
+                auto_download_updates = $31,
 
-                brand_color = $33,
+                brand_color = $32,
+                color_theme = $33,
+                dark_color_theme = $34,
+                dark_brand_color = $35,
+                sync_theme_with_system = $36,
+                active_theme_preset = $37,
+                dark_active_theme_preset = $38,
+                theme_dir = $39,
 
-                version = $34
+                version = $40
             ",
             max_concurrent_writes,
             max_concurrent_downloads,
-            theme,
             self.locale,
             default_page,
             self.collapsed_navigation,
@@ -244,6 +271,13 @@ impl Settings {
             self.pending_update_toast_for_version,
             self.auto_download_updates,
             self.brand_color,
+            self.color_theme,
+            self.dark_color_theme,
+            self.dark_brand_color,
+            self.sync_theme_with_system,
+            self.active_theme_preset,
+            self.dark_active_theme_preset,
+            self.theme_dir,
             version,
         )
         .execute(exec)
@@ -262,8 +296,19 @@ impl Settings {
                 Settings::CURRENT_VERSION
             );
         }
+
+        // The legacy `theme` column (Dark/Light/Oled/System) is no longer part
+        // of `Settings` itself, but is still needed to translate existing
+        // users onto the new hex-based color_theme during the version 4 -> 5
+        // migration below, so it's fetched separately here.
+        let legacy_theme: Option<String> =
+            sqlx::query_scalar!("SELECT theme FROM settings WHERE id = 0")
+                .fetch_optional(exec)
+                .await?;
+
         while settings.version < Settings::CURRENT_VERSION {
-            if let Err(err) = settings.perform_migration() {
+            if let Err(err) = settings.perform_migration(legacy_theme.as_deref())
+            {
                 tracing::error!(
                     "Failed to migrate settings from version {}: {}",
                     settings.version,
@@ -278,7 +323,10 @@ impl Settings {
         Ok(())
     }
 
-    pub fn perform_migration(&mut self) -> crate::Result<()> {
+    pub fn perform_migration(
+        &mut self,
+        legacy_theme: Option<&str>,
+    ) -> crate::Result<()> {
         match self.version {
             1 => {
                 let quoter = shlex::Quoter::new().allow_nul(true);
@@ -316,6 +364,23 @@ impl Settings {
             3 => {
                 self.version = 4;
             }
+            4 => {
+                // Translate the old Dark/Light/Oled/System enum into the new
+                // hex-based color_theme, reusing the exact surface-1 hex
+                // values from variables.scss so upgrading users land on
+                // visually identical surfaces rather than a jarring reset.
+                self.color_theme = match legacy_theme {
+                    Some("light") => "#ebebeb",
+                    Some("oled") => "#000000",
+                    // "dark", "system", or unknown all mapped to the dark palette
+                    _ => "#16181c",
+                }
+                .to_string();
+                self.dark_color_theme = "#16181c".to_string();
+                self.dark_brand_color = self.brand_color.clone();
+
+                self.version = 5;
+            }
             version => {
                 return Err(crate::ErrorKind::OtherError(format!(
                     "Invalid settings version: {version}"
@@ -325,37 +390,6 @@ impl Settings {
         }
 
         Ok(())
-    }
-}
-
-/// Theseus theme
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Theme {
-    Dark,
-    Light,
-    Oled,
-    System,
-}
-
-impl Theme {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Theme::Dark => "dark",
-            Theme::Light => "light",
-            Theme::Oled => "oled",
-            Theme::System => "system",
-        }
-    }
-
-    pub fn from_string(string: &str) -> Theme {
-        match string {
-            "dark" => Theme::Dark,
-            "light" => Theme::Light,
-            "oled" => Theme::Oled,
-            "system" => Theme::System,
-            _ => Theme::Dark,
-        }
     }
 }
 

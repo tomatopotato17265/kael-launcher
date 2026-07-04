@@ -16,11 +16,11 @@ import {
 	LibraryIcon,
 	LogInIcon,
 	LogOutIcon,
-	UserIcon,
 	NotepadTextIcon,
 	RefreshCwIcon,
 	ServerStackIcon,
 	SettingsIcon,
+	UserIcon,
 	WorldIcon,
 	XIcon,
 } from '@kael/assets'
@@ -115,6 +115,7 @@ import { setupLoadingStateProvider } from '@/providers/setup/loading-state'
 import { useError } from '@/store/error.js'
 import { useTheming } from '@/store/state'
 
+import { saveBrowseScrollPosition } from './helpers/browse-scroll'
 import { generateSkinPreviews } from './helpers/rendering/batch-skin-renderer'
 import { get_available_capes, get_available_skins } from './helpers/skins'
 import { AppNotificationManager } from './providers/app-notifications'
@@ -125,6 +126,12 @@ const router = useRouter()
 const route = useRoute()
 
 const lastDiscoverRoute = ref('/browse/modpack')
+
+router.beforeEach((to, from) => {
+	if (from.path.startsWith('/browse') && to.path.startsWith('/project')) {
+		saveBrowseScrollPosition(from.fullPath)
+	}
+})
 
 router.afterEach((to, from) => {
 	if (from.path.startsWith('/browse') && !from.query.i) {
@@ -299,7 +306,6 @@ const messages = defineMessages({
 async function setupApp() {
 	const {
 		native_decorations,
-		theme,
 		locale,
 		telemetry,
 		collapsed_navigation,
@@ -310,7 +316,14 @@ async function setupApp() {
 		developer_mode,
 		feature_flags,
 		pending_update_toast_for_version,
+		color_theme,
 		brand_color,
+		active_theme_preset,
+		dark_color_theme,
+		dark_brand_color,
+		dark_active_theme_preset,
+		sync_theme_with_system,
+		theme_dir,
 	} = await getSettings()
 
 	// Initialize locale from saved settings
@@ -331,13 +344,23 @@ async function setupApp() {
 	nativeDecorations.value = native_decorations
 	if (os.value !== 'MacOS') await getCurrentWindow().setDecorations(native_decorations)
 
-	themeStore.setThemeState(theme)
 	themeStore.collapsedNavigation = collapsed_navigation
 	themeStore.advancedRendering = advanced_rendering
 	themeStore.hideNametagSkinsPage = hide_nametag_skins_page
 	themeStore.devMode = developer_mode
 	themeStore.featureFlags = feature_flags
-	themeStore.applyBrandColor(brand_color ?? '#7f51f5')
+
+	themeStore.light = { colorTheme: color_theme, brandColor: brand_color, activeThemePreset: active_theme_preset }
+	themeStore.dark = {
+		colorTheme: dark_color_theme,
+		brandColor: dark_brand_color,
+		activeThemePreset: dark_active_theme_preset,
+	}
+	themeStore.syncWithSystem = sync_theme_with_system
+	themeStore.themeDir = theme_dir
+	await themeStore.loadInstalledThemes()
+	themeStore.refreshActiveConfig()
+
 	stateInitialized.value = true
 
 	isMaximized.value = await getCurrentWindow().isMaximized()

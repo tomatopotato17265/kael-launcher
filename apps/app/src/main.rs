@@ -244,6 +244,7 @@ fn main() {
         .plugin(api::profile_create::init())
         .plugin(api::settings::init())
         .plugin(api::tags::init())
+        .plugin(api::theming::init())
         .plugin(api::utils::init())
         .plugin(api::cache::init())
         .plugin(api::files::init())

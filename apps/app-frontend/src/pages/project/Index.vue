@@ -9,6 +9,16 @@
 			</div>
 			<InstanceIndicator v-if="instance && !projectInstallContext" :instance="instance" />
 			<template v-if="data">
+				<div v-if="!projectInstallContext" class="flex items-center">
+					<ButtonStyled circular type="transparent">
+						<button
+							:aria-label="formatMessage(messages.backToBrowse)"
+							@click="router.push(projectBrowseBackUrl)"
+						>
+							<ChevronLeftIcon />
+						</button>
+					</ButtonStyled>
+				</div>
 				<Teleport
 					v-if="themeStore.featureFlags.project_background"
 					to="#background-teleport-target"
@@ -209,6 +219,7 @@
 import {
 	BookmarkIcon,
 	CheckIcon,
+	ChevronLeftIcon,
 	ClipboardCopyIcon,
 	DownloadIcon,
 	ExternalIcon,
@@ -241,7 +252,7 @@ import { convertFileSrc } from '@tauri-apps/api/core'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import dayjs from 'dayjs'
 import relativeTime from 'dayjs/plugin/relativeTime'
-import { computed, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import ContextMenu from '@/components/ui/ContextMenu.vue'
@@ -672,6 +683,12 @@ function fetchDeferredServerData(project) {
 }
 
 await fetchProjectData()
+
+nextTick(() => {
+	requestAnimationFrame(() => {
+		document.querySelector('.app-viewport')?.scrollTo(0, 0)
+	})
+})
 
 let unlistenProcesses
 process_listener((e) => {

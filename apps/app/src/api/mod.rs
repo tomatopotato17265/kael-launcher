@@ -16,6 +16,7 @@ pub mod profile;
 pub mod profile_create;
 pub mod settings;
 pub mod tags;
+pub mod theming;
 pub mod utils;
 
 pub mod cache;
