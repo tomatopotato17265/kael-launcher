@@ -10,12 +10,9 @@ import {
 import {
 	ChangeSkinIcon,
 	CompassIcon,
-	ExternalIcon,
 	HomeIcon,
-	LeftArrowIcon,
 	LibraryIcon,
 	LogInIcon,
-	LogOutIcon,
 	NotepadTextIcon,
 	RefreshCwIcon,
 	ServerStackIcon,
@@ -26,7 +23,6 @@ import {
 } from '@kael/assets'
 import {
 	Admonition,
-	Avatar,
 	ButtonStyled,
 	commonMessages,
 	ContentInstallModal,
@@ -51,7 +47,6 @@ import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { getVersion } from '@tauri-apps/api/app'
 import { invoke } from '@tauri-apps/api/core'
 import { getCurrentWindow } from '@tauri-apps/api/window'
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http'
 import { openUrl } from '@tauri-apps/plugin-opener'
 import { type } from '@tauri-apps/plugin-os'
 import { saveWindowState, StateFlags } from '@tauri-apps/plugin-window-state'
@@ -60,6 +55,7 @@ import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import ModrinthAppLogo from '@/assets/modrinth_app.svg?component'
+import OnboardingFlow from '@/components/onboarding/OnboardingFlow.vue'
 import AppActionBar from '@/components/ui/AppActionBar.vue'
 import Breadcrumbs from '@/components/ui/Breadcrumbs.vue'
 import ErrorModal from '@/components/ui/ErrorModal.vue'
@@ -75,7 +71,11 @@ import WindowControls from '@/components/ui/WindowControls.vue'
 import { useCheckDisableMouseover } from '@/composables/macCssFix.js'
 import { config } from '@/config'
 import { debugAnalytics, initAnalytics, trackEvent } from '@/helpers/analytics'
-import { check_reachable, login as loginMinecraft, remove_user, users as getMinecraftUsers } from '@/helpers/auth.js'
+import {
+	check_reachable,
+	login as loginMinecraft,
+	users as getMinecraftUsers,
+} from '@/helpers/auth.js'
 import { get_user, get_version } from '@/helpers/cache.js'
 import {
 	command_listener,
@@ -119,6 +119,7 @@ import { setupProviders } from '@/providers/setup'
 import { setupAuthProvider } from '@/providers/setup/auth'
 import { setupLoadingStateProvider } from '@/providers/setup/loading-state'
 import { useError } from '@/store/error.js'
+import { useOnboarding } from '@/store/onboarding.ts'
 import { useTheming } from '@/store/state'
 
 import { saveBrowseScrollPosition } from './helpers/browse-scroll'
@@ -128,6 +129,7 @@ import { AppNotificationManager } from './providers/app-notifications'
 import { AppPopupNotificationManager } from './providers/app-popup-notifications'
 
 const themeStore = useTheming()
+const onboardingStore = useOnboarding()
 const router = useRouter()
 const route = useRoute()
 
@@ -154,7 +156,6 @@ router.afterEach((to, from) => {
 
 const discoverContentTo = computed(() => lastDiscoverRoute.value)
 const APP_LEFT_NAV_WIDTH = '4rem'
-const hostingRouteActive = computed(() => route.path.startsWith('/hosting'))
 const minecraftUsers = ref([])
 const mcLoginDisabled = ref(false)
 
@@ -165,13 +166,6 @@ async function signInMinecraft() {
 		minecraftUsers.value = await getMinecraftUsers().catch(() => [])
 	}
 	mcLoginDisabled.value = false
-}
-
-async function logOutMinecraft() {
-	for (const user of minecraftUsers.value) {
-		await remove_user(user.id).catch(() => {})
-	}
-	minecraftUsers.value = await getMinecraftUsers().catch(() => [])
 }
 
 const notificationManager = new AppNotificationManager()
@@ -236,7 +230,6 @@ const {
 const availableSurvey = ref(false)
 const displayedServerInviteNotifications = new Set()
 
-const showOnboarding = ref(false)
 const nativeDecorations = ref(false)
 
 const os = ref('')
@@ -347,7 +340,9 @@ async function setupApp() {
 	const dev = await isDev()
 	isDevEnvironment.value = dev
 	const version = await getVersion()
-	showOnboarding.value = !onboarded
+	if (!onboarded) {
+		onboardingStore.start()
+	}
 
 	nativeDecorations.value = native_decorations
 	if (os.value !== 'MacOS') await getCurrentWindow().setDecorations(native_decorations)
@@ -358,7 +353,11 @@ async function setupApp() {
 	themeStore.devMode = developer_mode
 	themeStore.featureFlags = feature_flags
 
-	themeStore.light = { colorTheme: color_theme, brandColor: brand_color, activeThemePreset: active_theme_preset }
+	themeStore.light = {
+		colorTheme: color_theme,
+		brandColor: brand_color,
+		activeThemePreset: active_theme_preset,
+	}
 	themeStore.dark = {
 		colorTheme: dark_color_theme,
 		brandColor: dark_brand_color,
@@ -635,7 +634,6 @@ watch(incompatibilityWarningModal, (modal) => {
 })
 
 setupAuthProvider()
-
 
 onMounted(() => {
 	invoke('show_window')
@@ -1245,6 +1243,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 
 <template>
 	<SplashScreen v-if="!stateFailed" ref="splashScreen" data-tauri-drag-region />
+	<OnboardingFlow v-if="stateInitialized && onboardingStore.active" />
 	<div id="teleports"></div>
 	<div
 		v-if="stateInitialized"
@@ -1321,10 +1320,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 			</NavButton>
 			<!-- Intentionally no recent-instances switcher or "new instance" button here — instance shortcuts don't belong in this sidebar. -->
 			<div class="flex flex-grow"></div>
-			<NavButton
-				v-tooltip.right="formatMessage(commonMessages.settingsLabel)"
-				to="/settings"
-			>
+			<NavButton v-tooltip.right="formatMessage(commonMessages.settingsLabel)" to="/settings">
 				<SettingsIcon />
 			</NavButton>
 			<NavButton
@@ -1336,11 +1332,7 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 				<RefreshCwIcon v-if="mcLoginDisabled" class="animate-spin" />
 				<LogInIcon v-else />
 			</NavButton>
-			<NavButton
-				v-if="minecraftUsers.length > 0"
-				v-tooltip.right="'Account'"
-				to="/account"
-			>
+			<NavButton v-if="minecraftUsers.length > 0" v-tooltip.right="'Account'" to="/account">
 				<UserIcon />
 			</NavButton>
 		</div>

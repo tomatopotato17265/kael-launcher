@@ -43,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Archon, Labrinth } from '@kael/api-client'
+import type { Archon } from '@kael/api-client'
 import { injectAuth, injectModrinthClient, ServersManageRootLayout } from '@kael/ui'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { openUrl } from '@tauri-apps/plugin-opener'

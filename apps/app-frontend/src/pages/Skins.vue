@@ -13,8 +13,6 @@ import {
 	commonMessages,
 	ConfirmModal,
 	defineMessages,
-	injectAuth,
-	injectModrinthClient,
 	injectNotificationManager,
 	SkinPreviewRenderer,
 	useVIntl,
@@ -184,8 +182,6 @@ const skinSectionList = useTemplateRef<VirtualSkinSectionListExpose>('skinSectio
 const { formatMessage } = useVIntl()
 const notifications = injectNotificationManager()
 const { addNotification, handleError } = notifications
-const auth = injectAuth()
-const client = injectModrinthClient()
 
 const themeStore = useTheming()
 const skins = ref<Skin[]>([])

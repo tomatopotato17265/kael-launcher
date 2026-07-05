@@ -266,12 +266,12 @@ import {
 	get_version_many,
 } from '@/helpers/cache.js'
 import {
-	curseForgeClassIdToProjectType,
 	curseforge_get_description,
 	curseforge_get_files,
 	curseforge_get_mod,
 	curseforge_install_file,
 	curseforge_install_modpack,
+	curseForgeClassIdToProjectType,
 	mapCurseForgeFilesToVersions,
 	mapCurseForgeModToProject,
 	pickCurseForgeFileForInstance,
@@ -285,7 +285,7 @@ import {
 	kill,
 	list as listInstances,
 } from '@/helpers/profile'
-import { get_categories, get_game_versions, get_loaders } from '@/helpers/tags'
+import { get_categories, get_loaders } from '@/helpers/tags'
 import { getServerLatency } from '@/helpers/worlds'
 import { injectContentInstall } from '@/providers/content-install'
 import { injectServerInstall } from '@/providers/server-install'
@@ -496,10 +496,7 @@ const installButtonTooltip = computed(() => {
 	return null
 })
 
-const [allLoaders, allGameVersions] = await Promise.all([
-	get_loaders().catch(handleError).then(ref),
-	get_game_versions().catch(handleError).then(ref),
-])
+const allLoaders = await get_loaders().catch(handleError).then(ref)
 
 async function handleClickPlay() {
 	if (!isServerProject.value) return

@@ -45,6 +45,9 @@ pub struct Settings {
     pub personalized_ads: bool,
 
     pub onboarded: bool,
+    /// Raw answers from the first-launch onboarding flow, stored as an opaque
+    /// JSON blob that only the frontend reads and writes.
+    pub onboarding_answers: Option<serde_json::Value>,
 
     pub extra_launch_args: Vec<String>,
     pub custom_env_vars: Vec<(String, String)>,
@@ -92,12 +95,12 @@ impl Settings {
         exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
     ) -> crate::Result<Self> {
         let res = sqlx::query!(
-            "
+            r#"
             SELECT
                 max_concurrent_writes, max_concurrent_downloads,
                 locale, default_page, collapsed_navigation, hide_nametag_skins_page, advanced_rendering, native_decorations,
                 discord_rpc, developer_mode, telemetry, personalized_ads,
-                onboarded,
+                onboarded, json(onboarding_answers) as "onboarding_answers?: serde_json::Value",
                 json(extra_launch_args) extra_launch_args, json(custom_env_vars) custom_env_vars,
                 mc_memory_max, mc_force_fullscreen, mc_game_resolution_x, mc_game_resolution_y, hide_on_process_start,
                 hook_pre_launch, hook_wrapper, hook_post_exit,
@@ -108,7 +111,7 @@ impl Settings {
                 active_font, font_dir,
                 version
             FROM settings
-            "
+            "#
         )
             .fetch_one(exec)
             .await?;
@@ -128,6 +131,7 @@ impl Settings {
             developer_mode: res.developer_mode == 1,
             personalized_ads: res.personalized_ads == 1,
             onboarded: res.onboarded == 1,
+            onboarding_answers: res.onboarding_answers,
             extra_launch_args: res
                 .extra_launch_args
                 .as_ref()
@@ -190,6 +194,11 @@ impl Settings {
         let extra_launch_args = serde_json::to_string(&self.extra_launch_args)?;
         let custom_env_vars = serde_json::to_string(&self.custom_env_vars)?;
         let feature_flags = serde_json::to_string(&self.feature_flags)?;
+        let onboarding_answers = self
+            .onboarding_answers
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?;
         let version = self.version as i64;
 
         sqlx::query!(
@@ -247,7 +256,9 @@ impl Settings {
                 active_font = $40,
                 font_dir = $41,
 
-                version = $42
+                onboarding_answers = jsonb($42),
+
+                version = $43
             ",
             max_concurrent_writes,
             max_concurrent_downloads,
@@ -290,6 +301,7 @@ impl Settings {
             self.theme_dir,
             self.active_font,
             self.font_dir,
+            onboarding_answers,
             version,
         )
         .execute(exec)

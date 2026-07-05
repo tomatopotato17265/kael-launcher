@@ -5,10 +5,12 @@ import { ref, watch } from 'vue'
 import EditThemeModal from '@/components/ui/settings/EditThemeModal.vue'
 import { get, set } from '@/helpers/settings.ts'
 import { getOS } from '@/helpers/utils'
+import { useOnboarding } from '@/store/onboarding.ts'
 import { useTheming } from '@/store/state'
 import type { FeatureFlag } from '@/store/theme.ts'
 
 const themeStore = useTheming()
+const onboardingStore = useOnboarding()
 const { formatMessage } = useVIntl()
 
 const worldsInHomeFlag: FeatureFlag = 'worlds_in_home'
@@ -106,6 +108,18 @@ const messages = defineMessages({
 		id: 'app.appearance-settings.show-play-time.description',
 		defaultMessage: `Displays how much time you've spent playing an instance.`,
 	},
+	replayOnboardingTitle: {
+		id: 'app.appearance-settings.replay-onboarding.title',
+		defaultMessage: 'Replay onboarding',
+	},
+	replayOnboardingDescription: {
+		id: 'app.appearance-settings.replay-onboarding.description',
+		defaultMessage: 'Go through the first-launch setup questions again.',
+	},
+	replayOnboardingButton: {
+		id: 'app.appearance-settings.replay-onboarding.button',
+		defaultMessage: 'Replay',
+	},
 })
 
 const os = ref(await getOS())
@@ -119,6 +133,11 @@ watch(
 	},
 	{ deep: true },
 )
+
+function replayOnboarding() {
+	settings.value.onboarded = false
+	onboardingStore.restart()
+}
 </script>
 <template>
 	<div class="flex items-center justify-between gap-4">
@@ -281,4 +300,17 @@ watch(
 		/>
 	</div>
 
+	<div class="mt-6 flex items-center justify-between gap-4">
+		<div>
+			<h2 class="m-0 text-lg font-semibold text-contrast">
+				{{ formatMessage(messages.replayOnboardingTitle) }}
+			</h2>
+			<p class="m-0 mt-1">{{ formatMessage(messages.replayOnboardingDescription) }}</p>
+		</div>
+		<ButtonStyled>
+			<button @click="replayOnboarding">
+				{{ formatMessage(messages.replayOnboardingButton) }}
+			</button>
+		</ButtonStyled>
+	</div>
 </template>

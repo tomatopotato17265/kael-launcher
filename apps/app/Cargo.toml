@@ -1,6 +1,6 @@
 [package]
 name = "kael_launcher"
-# The actual version is set by the theseus-build workflow on tagging
+# The actual version is set by the kael-release workflow on tagging
 version = "1.0.0-local"
 edition.workspace = true
 description = "The Modrinth App is a desktop application for managing your Minecraft mods"

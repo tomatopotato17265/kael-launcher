@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE settings\n            SET\n                max_concurrent_writes = $1,\n                max_concurrent_downloads = $2,\n\n                locale = $3,\n                default_page = $4,\n                collapsed_navigation = $5,\n                advanced_rendering = $6,\n                native_decorations = $7,\n\n                discord_rpc = $8,\n                developer_mode = $9,\n                telemetry = $10,\n                personalized_ads = $11,\n\n                onboarded = $12,\n\n                extra_launch_args = jsonb($13),\n                custom_env_vars = jsonb($14),\n                mc_memory_max = $15,\n                mc_force_fullscreen = $16,\n                mc_game_resolution_x = $17,\n                mc_game_resolution_y = $18,\n                hide_on_process_start = $19,\n\n                hook_pre_launch = $20,\n                hook_wrapper = $21,\n                hook_post_exit = $22,\n\n                custom_dir = $23,\n                prev_custom_dir = $24,\n                migrated = $25,\n\n                toggle_sidebar = $26,\n                feature_flags = $27,\n                hide_nametag_skins_page = $28,\n\n                skipped_update = $29,\n                pending_update_toast_for_version = $30,\n                auto_download_updates = $31,\n\n                brand_color = $32,\n                color_theme = $33,\n                dark_color_theme = $34,\n                dark_brand_color = $35,\n                sync_theme_with_system = $36,\n                active_theme_preset = $37,\n                dark_active_theme_preset = $38,\n                theme_dir = $39,\n                active_font = $40,\n                font_dir = $41,\n\n                onboarding_answers = jsonb($42),\n\n                version = $43\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 43
+    },
+    "nullable": []
+  },
+  "hash": "5f4c9bc6e66ffbb7a5527e48a854bbc423d50474f92464503f8dbf50272a9b18"
+}

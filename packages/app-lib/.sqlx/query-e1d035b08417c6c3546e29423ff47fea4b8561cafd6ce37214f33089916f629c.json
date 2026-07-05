@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT\n                max_concurrent_writes, max_concurrent_downloads,\n                locale, default_page, collapsed_navigation, hide_nametag_skins_page, advanced_rendering, native_decorations,\n                discord_rpc, developer_mode, telemetry, personalized_ads,\n                onboarded,\n                json(extra_launch_args) extra_launch_args, json(custom_env_vars) custom_env_vars,\n                mc_memory_max, mc_force_fullscreen, mc_game_resolution_x, mc_game_resolution_y, hide_on_process_start,\n                hook_pre_launch, hook_wrapper, hook_post_exit,\n                custom_dir, prev_custom_dir, migrated, json(feature_flags) feature_flags, toggle_sidebar,\n                skipped_update, pending_update_toast_for_version, auto_download_updates,\n                brand_color, color_theme, dark_color_theme, dark_brand_color,\n                sync_theme_with_system, active_theme_preset, dark_active_theme_preset, theme_dir,\n                active_font, font_dir,\n                version\n            FROM settings\n            ",
+  "query": "\n            SELECT\n                max_concurrent_writes, max_concurrent_downloads,\n                locale, default_page, collapsed_navigation, hide_nametag_skins_page, advanced_rendering, native_decorations,\n                discord_rpc, developer_mode, telemetry, personalized_ads,\n                onboarded, json(onboarding_answers) as \"onboarding_answers?: serde_json::Value\",\n                json(extra_launch_args) extra_launch_args, json(custom_env_vars) custom_env_vars,\n                mc_memory_max, mc_force_fullscreen, mc_game_resolution_x, mc_game_resolution_y, hide_on_process_start,\n                hook_pre_launch, hook_wrapper, hook_post_exit,\n                custom_dir, prev_custom_dir, migrated, json(feature_flags) feature_flags, toggle_sidebar,\n                skipped_update, pending_update_toast_for_version, auto_download_updates,\n                brand_color, color_theme, dark_color_theme, dark_brand_color,\n                sync_theme_with_system, active_theme_preset, dark_active_theme_preset, theme_dir,\n                active_font, font_dir,\n                version\n            FROM settings\n            ",
   "describe": {
     "columns": [
       {
@@ -69,148 +69,153 @@
         "type_info": "Integer"
       },
       {
-        "name": "extra_launch_args",
+        "name": "onboarding_answers?: serde_json::Value",
         "ordinal": 13,
-        "type_info": "Text"
+        "type_info": "Null"
       },
       {
-        "name": "custom_env_vars",
+        "name": "extra_launch_args",
         "ordinal": 14,
         "type_info": "Text"
       },
       {
-        "name": "mc_memory_max",
+        "name": "custom_env_vars",
         "ordinal": 15,
-        "type_info": "Integer"
+        "type_info": "Text"
       },
       {
-        "name": "mc_force_fullscreen",
+        "name": "mc_memory_max",
         "ordinal": 16,
         "type_info": "Integer"
       },
       {
-        "name": "mc_game_resolution_x",
+        "name": "mc_force_fullscreen",
         "ordinal": 17,
         "type_info": "Integer"
       },
       {
-        "name": "mc_game_resolution_y",
+        "name": "mc_game_resolution_x",
         "ordinal": 18,
         "type_info": "Integer"
       },
       {
-        "name": "hide_on_process_start",
+        "name": "mc_game_resolution_y",
         "ordinal": 19,
         "type_info": "Integer"
       },
       {
-        "name": "hook_pre_launch",
+        "name": "hide_on_process_start",
         "ordinal": 20,
-        "type_info": "Text"
+        "type_info": "Integer"
       },
       {
-        "name": "hook_wrapper",
+        "name": "hook_pre_launch",
         "ordinal": 21,
         "type_info": "Text"
       },
       {
-        "name": "hook_post_exit",
+        "name": "hook_wrapper",
         "ordinal": 22,
         "type_info": "Text"
       },
       {
-        "name": "custom_dir",
+        "name": "hook_post_exit",
         "ordinal": 23,
         "type_info": "Text"
       },
       {
-        "name": "prev_custom_dir",
+        "name": "custom_dir",
         "ordinal": 24,
         "type_info": "Text"
       },
       {
-        "name": "migrated",
+        "name": "prev_custom_dir",
         "ordinal": 25,
+        "type_info": "Text"
+      },
+      {
+        "name": "migrated",
+        "ordinal": 26,
         "type_info": "Integer"
       },
       {
         "name": "feature_flags",
-        "ordinal": 26,
+        "ordinal": 27,
         "type_info": "Text"
       },
       {
         "name": "toggle_sidebar",
-        "ordinal": 27,
+        "ordinal": 28,
         "type_info": "Integer"
       },
       {
         "name": "skipped_update",
-        "ordinal": 28,
-        "type_info": "Text"
-      },
-      {
-        "name": "pending_update_toast_for_version",
         "ordinal": 29,
         "type_info": "Text"
       },
       {
-        "name": "auto_download_updates",
+        "name": "pending_update_toast_for_version",
         "ordinal": 30,
+        "type_info": "Text"
+      },
+      {
+        "name": "auto_download_updates",
+        "ordinal": 31,
         "type_info": "Integer"
       },
       {
         "name": "brand_color",
-        "ordinal": 31,
-        "type_info": "Text"
-      },
-      {
-        "name": "color_theme",
         "ordinal": 32,
         "type_info": "Text"
       },
       {
-        "name": "dark_color_theme",
+        "name": "color_theme",
         "ordinal": 33,
         "type_info": "Text"
       },
       {
-        "name": "dark_brand_color",
+        "name": "dark_color_theme",
         "ordinal": 34,
         "type_info": "Text"
       },
       {
-        "name": "sync_theme_with_system",
+        "name": "dark_brand_color",
         "ordinal": 35,
+        "type_info": "Text"
+      },
+      {
+        "name": "sync_theme_with_system",
+        "ordinal": 36,
         "type_info": "Integer"
       },
       {
         "name": "active_theme_preset",
-        "ordinal": 36,
-        "type_info": "Text"
-      },
-      {
-        "name": "dark_active_theme_preset",
         "ordinal": 37,
         "type_info": "Text"
       },
       {
-        "name": "theme_dir",
+        "name": "dark_active_theme_preset",
         "ordinal": 38,
         "type_info": "Text"
       },
       {
-        "name": "active_font",
+        "name": "theme_dir",
         "ordinal": 39,
         "type_info": "Text"
       },
       {
-        "name": "font_dir",
+        "name": "active_font",
         "ordinal": 40,
         "type_info": "Text"
       },
       {
-        "name": "version",
+        "name": "font_dir",
         "ordinal": 41,
+        "type_info": "Text"
+      },
+      {
+        "name": "version",
+        "ordinal": 42,
         "type_info": "Integer"
       }
     ],
@@ -231,6 +236,7 @@
       false,
       false,
       false,
+      null,
       null,
       null,
       false,
@@ -262,5 +268,5 @@
       false
     ]
   },
-  "hash": "2e4947e58e15e891219817355d8f59f4bdbdb6d2158718c402bb3c6a009801eb"
+  "hash": "e1d035b08417c6c3546e29423ff47fea4b8561cafd6ce37214f33089916f629c"
 }
