@@ -201,6 +201,22 @@ pub struct WarningPayload {
 }
 
 #[derive(Serialize, Clone)]
+#[cfg(feature = "tauri")]
+pub struct ThemePayload {
+    /// Name of the theme file that changed on disk, if a single file could be
+    /// attributed to the change.
+    pub file_name: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+#[cfg(feature = "tauri")]
+pub struct FontPayload {
+    /// Name of the font file that changed on disk, if a single file could be
+    /// attributed to the change.
+    pub file_name: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
 #[serde(tag = "event")]
 pub enum CommandPayload {
     InstallMod {

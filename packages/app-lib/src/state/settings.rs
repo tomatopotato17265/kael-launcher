@@ -35,6 +35,11 @@ pub struct Settings {
     pub dark_brand_color: String,
     pub dark_active_theme_preset: Option<String>,
 
+    /// Id of the selected installed font, or `None`/`"default"` for the built-in font.
+    pub active_font: Option<String>,
+    /// Custom fonts folder. `None` means the default `config_dir/fonts`.
+    pub font_dir: Option<String>,
+
     pub telemetry: bool,
     pub discord_rpc: bool,
     pub personalized_ads: bool,
@@ -100,6 +105,7 @@ impl Settings {
                 skipped_update, pending_update_toast_for_version, auto_download_updates,
                 brand_color, color_theme, dark_color_theme, dark_brand_color,
                 sync_theme_with_system, active_theme_preset, dark_active_theme_preset, theme_dir,
+                active_font, font_dir,
                 version
             FROM settings
             "
@@ -168,6 +174,8 @@ impl Settings {
             dark_color_theme: res.dark_color_theme,
             dark_brand_color: res.dark_brand_color,
             dark_active_theme_preset: res.dark_active_theme_preset,
+            active_font: res.active_font,
+            font_dir: res.font_dir,
             version: res.version as usize,
         })
     }
@@ -236,8 +244,10 @@ impl Settings {
                 active_theme_preset = $37,
                 dark_active_theme_preset = $38,
                 theme_dir = $39,
+                active_font = $40,
+                font_dir = $41,
 
-                version = $40
+                version = $42
             ",
             max_concurrent_writes,
             max_concurrent_downloads,
@@ -278,6 +288,8 @@ impl Settings {
             self.active_theme_preset,
             self.dark_active_theme_preset,
             self.theme_dir,
+            self.active_font,
+            self.font_dir,
             version,
         )
         .execute(exec)

@@ -77,7 +77,13 @@ import { config } from '@/config'
 import { debugAnalytics, initAnalytics, trackEvent } from '@/helpers/analytics'
 import { check_reachable, login as loginMinecraft, remove_user, users as getMinecraftUsers } from '@/helpers/auth.js'
 import { get_user, get_version } from '@/helpers/cache.js'
-import { command_listener, notification_listener, warning_listener } from '@/helpers/events.js'
+import {
+	command_listener,
+	font_listener,
+	notification_listener,
+	theme_listener,
+	warning_listener,
+} from '@/helpers/events.js'
 import { create_profile_and_install_from_file } from '@/helpers/pack'
 import { list } from '@/helpers/profile.js'
 import { mergeUrlQuery, parseModrinthLink } from '@/helpers/project-links.ts'
@@ -324,6 +330,8 @@ async function setupApp() {
 		dark_active_theme_preset,
 		sync_theme_with_system,
 		theme_dir,
+		active_font,
+		font_dir,
 	} = await getSettings()
 
 	// Initialize locale from saved settings
@@ -361,6 +369,11 @@ async function setupApp() {
 	await themeStore.loadInstalledThemes()
 	themeStore.refreshActiveConfig()
 
+	themeStore.activeFont = active_font ?? 'default'
+	themeStore.fontDir = font_dir
+	await themeStore.loadInstalledFonts()
+	await themeStore.applyFont(themeStore.activeFont)
+
 	stateInitialized.value = true
 
 	isMaximized.value = await getCurrentWindow().isMaximized()
@@ -391,6 +404,19 @@ async function setupApp() {
 			type: 'warn',
 		}),
 	)
+
+	// Hot-reload themes: when a theme file changes on disk, reload the list and
+	// re-apply the active theme live so creators can iterate without restarting.
+	await theme_listener(async () => {
+		await themeStore.loadInstalledThemes()
+		themeStore.refreshActiveConfig()
+	})
+
+	// Hot-reload fonts: reload the list and re-apply the active font live.
+	await font_listener(async () => {
+		await themeStore.loadInstalledFonts()
+		await themeStore.applyFont(themeStore.activeFont)
+	})
 
 	fetch(`https://api.modrinth.com/appCriticalAnnouncement.json?version=${version}`)
 		.then((response) => response.json())

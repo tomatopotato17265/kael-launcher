@@ -6,6 +6,7 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
         .invoke_handler(tauri::generate_handler![
             theming_list_installed_themes,
             theming_upload_theme,
+            theming_watch_dir,
         ])
         .build()
 }
@@ -27,4 +28,13 @@ pub async fn theming_upload_theme(
 ) -> Result<theming::InstalledTheme> {
     let res = theming::upload_theme(&source_path).await?;
     Ok(res)
+}
+
+// (Re-)register the configured themes folder with the file watcher so live
+// edits hot-reload. Called after the themes folder setting changes.
+// invoke('plugin:theming|theming_watch_dir')
+#[tauri::command]
+pub async fn theming_watch_dir() -> Result<()> {
+    theming::refresh_themes_watch().await?;
+    Ok(())
 }

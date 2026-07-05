@@ -111,6 +111,14 @@ impl State {
             )
             .await;
 
+            if let Err(e) = crate::api::theming::refresh_themes_watch().await {
+                tracing::warn!("Failed to register themes watch: {e}");
+            }
+
+            if let Err(e) = crate::api::fonts::refresh_fonts_watch().await {
+                tracing::warn!("Failed to register fonts watch: {e}");
+            }
+
             let res = tokio::try_join!(
                 state.discord_rpc.clear_to_default(true),
                 Profile::refresh_all(),

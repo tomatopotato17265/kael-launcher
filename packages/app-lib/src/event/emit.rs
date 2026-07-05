@@ -5,7 +5,8 @@ use crate::event::{
 };
 #[cfg(feature = "tauri")]
 use crate::event::{
-    LoadingPayload, ProcessPayload, ProfilePayload, WarningPayload,
+    FontPayload, LoadingPayload, ProcessPayload, ProfilePayload, ThemePayload,
+    WarningPayload,
 };
 use futures::prelude::*;
 use serde_json::Value;
@@ -217,6 +218,38 @@ pub async fn emit_warning(message: &str) -> crate::Result<()> {
             .map_err(EventError::from)?;
     }
     tracing::warn!("{}", message);
+    Ok(())
+}
+
+// emit_theme(file_name)
+// Signals the frontend that a theme file changed on disk so it can reload the
+// installed themes list and re-apply the active theme live.
+#[allow(unused_variables)]
+pub async fn emit_theme(file_name: Option<String>) -> crate::Result<()> {
+    #[cfg(feature = "tauri")]
+    {
+        let event_state = crate::EventState::get()?;
+        event_state
+            .app
+            .emit("theme", ThemePayload { file_name })
+            .map_err(EventError::from)?;
+    }
+    Ok(())
+}
+
+// emit_font(file_name)
+// Signals the frontend that a font file changed on disk so it can reload the
+// installed fonts list and re-apply the active font live.
+#[allow(unused_variables)]
+pub async fn emit_font(file_name: Option<String>) -> crate::Result<()> {
+    #[cfg(feature = "tauri")]
+    {
+        let event_state = crate::EventState::get()?;
+        event_state
+            .app
+            .emit("font", FontPayload { file_name })
+            .map_err(EventError::from)?;
+    }
     Ok(())
 }
 

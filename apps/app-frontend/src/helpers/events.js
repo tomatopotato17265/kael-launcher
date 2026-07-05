@@ -98,6 +98,26 @@ export async function notification_listener(callback) {
 	return await listen('notification', (event) => callback(event.payload))
 }
 
+/// Payload for the 'theme' event
+/*
+    ThemePayload {
+        file_name: string | null // theme file that changed on disk
+    }
+*/
+export async function theme_listener(callback) {
+	return await listen('theme', (event) => callback(event.payload))
+}
+
+/// Payload for the 'font' event
+/*
+    FontPayload {
+        file_name: string | null // font file that changed on disk
+    }
+*/
+export async function font_listener(callback) {
+	return await listen('font', (event) => callback(event.payload))
+}
+
 /// Payload for the 'log' event
 /*
     LogPayload {

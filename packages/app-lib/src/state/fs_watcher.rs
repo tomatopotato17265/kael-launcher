@@ -30,6 +30,58 @@ pub async fn init_watcher() -> crate::Result<FileWatcher> {
 
             match res {
                 Ok(events) => {
+                    if let Some(themes_dir) = resolve_themes_dir().await {
+                        let mut changed_theme_file = None;
+                        let mut theme_changed = false;
+                        for e in events.iter() {
+                            if e.path.starts_with(&themes_dir) {
+                                theme_changed = true;
+                                if changed_theme_file.is_none() {
+                                    changed_theme_file = e
+                                        .path
+                                        .file_name()
+                                        .map(|n| {
+                                            n.to_string_lossy().to_string()
+                                        });
+                                }
+                            }
+                        }
+                        if theme_changed {
+                            tokio::spawn(async move {
+                                let _ = crate::event::emit::emit_theme(
+                                    changed_theme_file,
+                                )
+                                .await;
+                            });
+                        }
+                    }
+
+                    if let Some(fonts_dir) = resolve_fonts_dir().await {
+                        let mut changed_font_file = None;
+                        let mut font_changed = false;
+                        for e in events.iter() {
+                            if e.path.starts_with(&fonts_dir) {
+                                font_changed = true;
+                                if changed_font_file.is_none() {
+                                    changed_font_file = e
+                                        .path
+                                        .file_name()
+                                        .map(|n| {
+                                            n.to_string_lossy().to_string()
+                                        });
+                                }
+                            }
+                        }
+                        if font_changed {
+                            tokio::spawn(async move {
+                                let _ = crate::event::emit::emit_font(
+                                    changed_font_file,
+                                )
+                                .await;
+                            });
+                        }
+                    }
+
                     let mut visited_profiles = Vec::new();
 
                     events.iter().for_each(|e| {
@@ -137,6 +189,63 @@ pub async fn init_watcher() -> crate::Result<FileWatcher> {
     });
 
     Ok(RwLock::new(file_watcher))
+}
+
+/// Resolves the configured themes directory (custom `theme_dir` setting, or
+/// the default `config_dir/themes`) without creating it. Returns `None` if the
+/// state or settings can't be read.
+async fn resolve_themes_dir() -> Option<std::path::PathBuf> {
+    let state = State::get().await.ok()?;
+    let settings = crate::state::Settings::get(&state.pool).await.ok()?;
+    Some(match settings.theme_dir {
+        Some(dir) => std::path::PathBuf::from(dir),
+        None => state.directories.config_dir.join("themes"),
+    })
+}
+
+/// Registers the themes directory with the watcher so live edits to theme
+/// files are picked up. Safe to call repeatedly (e.g. after the themes folder
+/// setting changes).
+pub(crate) async fn watch_themes_dir(
+    watcher: &FileWatcher,
+    dir: &std::path::Path,
+) {
+    if let Err(e) = crate::util::io::create_dir_all(dir).await {
+        tracing::error!("Failed to create themes dir for watcher {dir:?}: {e}");
+        return;
+    }
+
+    let mut watcher = watcher.write().await;
+    if let Err(e) = watcher.watcher().watch(dir, RecursiveMode::Recursive) {
+        tracing::error!("Failed to watch themes directory {dir:?}: {e}");
+    }
+}
+
+/// Resolves the configured fonts directory without creating it.
+async fn resolve_fonts_dir() -> Option<std::path::PathBuf> {
+    let state = State::get().await.ok()?;
+    let settings = crate::state::Settings::get(&state.pool).await.ok()?;
+    Some(match settings.font_dir {
+        Some(dir) => std::path::PathBuf::from(dir),
+        None => state.directories.config_dir.join("fonts"),
+    })
+}
+
+/// Registers the fonts directory with the watcher so dropped/edited font files
+/// hot-reload. Safe to call repeatedly.
+pub(crate) async fn watch_fonts_dir(
+    watcher: &FileWatcher,
+    dir: &std::path::Path,
+) {
+    if let Err(e) = crate::util::io::create_dir_all(dir).await {
+        tracing::error!("Failed to create fonts dir for watcher {dir:?}: {e}");
+        return;
+    }
+
+    let mut watcher = watcher.write().await;
+    if let Err(e) = watcher.watcher().watch(dir, RecursiveMode::Recursive) {
+        tracing::error!("Failed to watch fonts directory {dir:?}: {e}");
+    }
 }
 
 /// Watches all existing profiles

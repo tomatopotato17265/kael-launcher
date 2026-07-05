@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT\n                max_concurrent_writes, max_concurrent_downloads,\n                locale, default_page, collapsed_navigation, hide_nametag_skins_page, advanced_rendering, native_decorations,\n                discord_rpc, developer_mode, telemetry, personalized_ads,\n                onboarded,\n                json(extra_launch_args) extra_launch_args, json(custom_env_vars) custom_env_vars,\n                mc_memory_max, mc_force_fullscreen, mc_game_resolution_x, mc_game_resolution_y, hide_on_process_start,\n                hook_pre_launch, hook_wrapper, hook_post_exit,\n                custom_dir, prev_custom_dir, migrated, json(feature_flags) feature_flags, toggle_sidebar,\n                skipped_update, pending_update_toast_for_version, auto_download_updates,\n                brand_color, color_theme, dark_color_theme, dark_brand_color,\n                sync_theme_with_system, active_theme_preset, dark_active_theme_preset, theme_dir,\n                version\n            FROM settings\n            ",
+  "query": "\n            SELECT\n                max_concurrent_writes, max_concurrent_downloads,\n                locale, default_page, collapsed_navigation, hide_nametag_skins_page, advanced_rendering, native_decorations,\n                discord_rpc, developer_mode, telemetry, personalized_ads,\n                onboarded,\n                json(extra_launch_args) extra_launch_args, json(custom_env_vars) custom_env_vars,\n                mc_memory_max, mc_force_fullscreen, mc_game_resolution_x, mc_game_resolution_y, hide_on_process_start,\n                hook_pre_launch, hook_wrapper, hook_post_exit,\n                custom_dir, prev_custom_dir, migrated, json(feature_flags) feature_flags, toggle_sidebar,\n                skipped_update, pending_update_toast_for_version, auto_download_updates,\n                brand_color, color_theme, dark_color_theme, dark_brand_color,\n                sync_theme_with_system, active_theme_preset, dark_active_theme_preset, theme_dir,\n                active_font, font_dir,\n                version\n            FROM settings\n            ",
   "describe": {
     "columns": [
       {
@@ -199,8 +199,18 @@
         "type_info": "Text"
       },
       {
-        "name": "version",
+        "name": "active_font",
         "ordinal": 39,
+        "type_info": "Text"
+      },
+      {
+        "name": "font_dir",
+        "ordinal": 40,
+        "type_info": "Text"
+      },
+      {
+        "name": "version",
+        "ordinal": 41,
         "type_info": "Integer"
       }
     ],
@@ -247,8 +257,10 @@
       true,
       true,
       true,
+      true,
+      true,
       false
     ]
   },
-  "hash": "0d919de0f8613c42d9b0427436c1b4cb966c8383f0fd1b1780b2d21f02a38aed"
+  "hash": "2e4947e58e15e891219817355d8f59f4bdbdb6d2158718c402bb3c6a009801eb"
 }

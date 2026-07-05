@@ -1,6 +1,7 @@
 //! API for interacting with Theseus
 pub mod cache;
 pub mod curseforge;
+pub mod fonts;
 pub mod friends;
 pub mod handler;
 pub mod hosting;
@@ -38,7 +39,7 @@ pub mod prelude {
         State,
         data::*,
         event::CommandPayload,
-        hosting, jre, metadata, minecraft_auth, mr_auth, pack, process,
+        fonts, hosting, jre, metadata, minecraft_auth, mr_auth, pack, process,
         profile::{self, Profile, create},
         settings,
         state::ReleaseChannel,

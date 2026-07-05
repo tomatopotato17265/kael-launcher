@@ -21,6 +21,7 @@ pub mod utils;
 
 pub mod cache;
 pub mod files;
+pub mod fonts;
 pub mod friends;
 pub mod worlds;
 

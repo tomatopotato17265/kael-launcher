@@ -77,6 +77,9 @@ export type AppSettings = {
 	dark_brand_color: string
 	dark_active_theme_preset: string | null
 
+	active_font: string | null
+	font_dir: string | null
+
 	version: number
 }
 

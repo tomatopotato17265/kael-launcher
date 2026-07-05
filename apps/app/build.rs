@@ -264,6 +264,7 @@ fn main() {
                     .commands(&[
                         "theming_list_installed_themes",
                         "theming_upload_theme",
+                        "theming_watch_dir",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
@@ -309,6 +310,20 @@ fn main() {
                         "file_extract_zip",
                         "file_save_as",
                         "file_read_dragged_file",
+                    ])
+                    .default_permission(
+                        DefaultPermissionRule::AllowAllCommands,
+                    ),
+            )
+            .plugin(
+                "fonts",
+                InlinedPlugin::new()
+                    .commands(&[
+                        "fonts_list_installed_fonts",
+                        "fonts_load_font_face",
+                        "fonts_download_google_font",
+                        "fonts_delete_font",
+                        "fonts_watch_dir",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

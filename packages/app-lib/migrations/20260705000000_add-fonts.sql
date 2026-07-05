@@ -1,0 +1,2 @@
+ALTER TABLE settings ADD COLUMN font_dir TEXT NULL;
+ALTER TABLE settings ADD COLUMN active_font TEXT NULL;

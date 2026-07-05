@@ -97,6 +97,15 @@ fn restart_app(app: tauri::AppHandle) {
     app.restart();
 }
 
+// Opens the native WebView inspector so theme creators can debug DOM/CSS.
+// Available in release because the `devtools` Tauri feature is enabled.
+#[tauri::command]
+fn open_devtools(app: tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        window.open_devtools();
+    }
+}
+
 #[tauri::command]
 async fn set_restart_after_pending_update(
     should_restart: bool,
@@ -248,6 +257,7 @@ fn main() {
         .plugin(api::utils::init())
         .plugin(api::cache::init())
         .plugin(api::files::init())
+        .plugin(api::fonts::init())
         .plugin(api::friends::init())
         .plugin(api::worlds::init())
         .manage(PendingUpdateData::default())
@@ -262,6 +272,7 @@ fn main() {
             toggle_decorations,
             show_window,
             restart_app,
+            open_devtools,
         ]);
 
     tracing::info!("Initializing app...");

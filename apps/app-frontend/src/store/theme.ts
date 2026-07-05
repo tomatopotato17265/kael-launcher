@@ -1,9 +1,26 @@
 import { defineStore } from 'pinia'
 
+import type { InstalledFont } from '@/helpers/fonts.ts'
+import { listInstalledFonts, loadFontFace } from '@/helpers/fonts.ts'
 import type { InstalledTheme } from '@/helpers/theming.ts'
-import { listInstalledThemes } from '@/helpers/theming.ts'
+import { listInstalledThemes, validateThemeCss } from '@/helpers/theming.ts'
+import { DEFAULT_FONT_ID } from '@/store/font-presets.ts'
 
 let systemThemeMq: MediaQueryList | null = null
+
+// The <style> element holding the active CSS theme's raw CSS, injected as the
+// last child of <head> so it wins the cascade over the app's own stylesheets.
+const CUSTOM_THEME_STYLE_ID = 'mr-custom-theme'
+let themeStyleEl: HTMLStyleElement | null = null
+
+// The <style> element holding the active custom font's @font-face rules.
+const CUSTOM_FONT_STYLE_ID = 'mr-custom-font'
+let fontStyleEl: HTMLStyleElement | null = null
+
+// Fallback stack appended after a chosen font, matching the tail of the stock
+// `--font-standard` (defaults.scss) so text stays legible if the font fails.
+const DEFAULT_FONT_STACK =
+	'-apple-system, BlinkMacSystemFont, Segoe UI, Oxygen, Ubuntu, Roboto, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif'
 
 export const DEFAULT_FEATURE_FLAGS = {
 	project_background: false,
@@ -53,6 +70,11 @@ export type ThemeStore = {
 	themeDir: string | null
 	installedThemes: InstalledTheme[]
 
+	// Font is a single global setting, not part of the light/dark ThemeConfig.
+	activeFont: string | null
+	fontDir: string | null
+	installedFonts: InstalledFont[]
+
 	advancedRendering: boolean
 	hideNametagSkinsPage: boolean
 
@@ -67,6 +89,10 @@ export const DEFAULT_THEME_STORE: ThemeStore = {
 
 	themeDir: null,
 	installedThemes: [],
+
+	activeFont: DEFAULT_FONT_ID,
+	fontDir: null,
+	installedFonts: [],
 
 	advancedRendering: true,
 	hideNametagSkinsPage: false,
@@ -167,6 +193,33 @@ export const useTheming = defineStore('themeStore', {
 				}
 				appliedVariableKeys = Object.keys(installed.theme.variables)
 			}
+
+			this.applyCustomCss(installed?.theme.css ?? null)
+		},
+		applyCustomCss(css: string | null) {
+			if (!css) {
+				themeStyleEl?.remove()
+				themeStyleEl = null
+				return
+			}
+
+			if (!themeStyleEl) {
+				themeStyleEl = document.createElement('style')
+				themeStyleEl.id = CUSTOM_THEME_STYLE_ID
+			}
+			// Keep it last in <head> so it out-cascades the app's own styles.
+			document.head.appendChild(themeStyleEl)
+			themeStyleEl.textContent = css
+
+			// Browsers silently drop invalid CSS; surface parse errors to the
+			// native devtools console so theme creators get feedback.
+			validateThemeCss(css)
+				.then((errors) => {
+					for (const err of errors) {
+						console.warn(`[theme] CSS parse error — ${err.message}`)
+					}
+				})
+				.catch(() => {})
 		},
 		applyBrandColor(color: string) {
 			const root = document.documentElement
@@ -196,6 +249,45 @@ export const useTheming = defineStore('themeStore', {
 		},
 		async loadInstalledThemes() {
 			this.installedThemes = await listInstalledThemes()
+		},
+		async loadInstalledFonts() {
+			this.installedFonts = await listInstalledFonts()
+		},
+		async applyFont(id: string | null) {
+			// Default (Inter) is the absence of an override, so it can never be
+			// lost: clear the injected face + the body-level font var.
+			if (!id || id === DEFAULT_FONT_ID) {
+				fontStyleEl?.remove()
+				fontStyleEl = null
+				document.body.style.removeProperty('--font-standard')
+				return
+			}
+
+			const installed = this.installedFonts.find((f) => f.id === id)
+			if (!installed) {
+				fontStyleEl?.remove()
+				fontStyleEl = null
+				document.body.style.removeProperty('--font-standard')
+				return
+			}
+
+			try {
+				const faceCss = await loadFontFace(id)
+				if (!fontStyleEl) {
+					fontStyleEl = document.createElement('style')
+					fontStyleEl.id = CUSTOM_FONT_STYLE_ID
+				}
+				document.head.appendChild(fontStyleEl)
+				fontStyleEl.textContent = faceCss
+				// `--font-standard` is declared on `body`, so the override must
+				// target body (an inline style beats the stylesheet declaration).
+				document.body.style.setProperty(
+					'--font-standard',
+					`"${installed.name}", ${DEFAULT_FONT_STACK}`,
+				)
+			} catch (e) {
+				console.warn(`[font] failed to apply font ${id} —`, e)
+			}
 		},
 		getFeatureFlag(key: FeatureFlag) {
 			return this.featureFlags[key] ?? DEFAULT_FEATURE_FLAGS[key]
