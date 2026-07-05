@@ -54,7 +54,6 @@ import { $fetch } from 'ofetch'
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
-import ModrinthAppLogo from '@/assets/modrinth_app.svg?component'
 import OnboardingFlow from '@/components/onboarding/OnboardingFlow.vue'
 import AppActionBar from '@/components/ui/AppActionBar.vue'
 import Breadcrumbs from '@/components/ui/Breadcrumbs.vue'
@@ -1338,7 +1337,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 		</div>
 		<div data-tauri-drag-region class="app-grid-statusbar bg-bg-raised h-[--top-bar-height] flex">
 			<div data-tauri-drag-region class="flex min-w-0 flex-1 overflow-hidden p-3">
-				<ModrinthAppLogo class="h-full w-auto shrink-0 text-contrast pointer-events-none" />
 				<Breadcrumbs class="pt-[2px]" />
 			</div>
 			<section data-tauri-drag-region class="flex shrink-0 ml-auto items-center">
