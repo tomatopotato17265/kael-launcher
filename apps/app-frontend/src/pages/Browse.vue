@@ -35,31 +35,31 @@ import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 
 import ContextMenu from '@/components/ui/ContextMenu.vue'
 import { useAppServerBrowse } from '@/composables/browse/use-app-server-browse'
+import { takeBrowseScrollPosition } from '@/helpers/browse-scroll'
 import {
 	get_project,
 	get_project_v3,
 	get_search_results_v3,
 	get_version_many,
 } from '@/helpers/cache.js'
-import { takeBrowseScrollPosition } from '@/helpers/browse-scroll'
+import {
+	curseforge_get_files,
+	curseforge_install_file,
+	curseforge_install_modpack,
+	curseforge_is_enabled,
+	curseforge_search,
+	type CurseForgeMod,
+	CurseForgeSortField,
+	loaderToCurseForgeModLoaderType,
+	pickCurseForgeFileForInstance,
+	projectTypeToCurseForgeClassId,
+} from '@/helpers/curseforge'
 import { profile_listener } from '@/helpers/events.js'
 import { get_loader_versions as getLoaderManifest } from '@/helpers/metadata'
 import {
 	get as getInstance,
 	get_installed_project_ids as getInstalledProjectIds,
 } from '@/helpers/profile.js'
-import {
-	CurseForgeSortField,
-	curseforge_get_files,
-	curseforge_install_file,
-	curseforge_install_modpack,
-	curseforge_is_enabled,
-	curseforge_search,
-	loaderToCurseForgeModLoaderType,
-	pickCurseForgeFileForInstance,
-	projectTypeToCurseForgeClassId,
-	type CurseForgeMod,
-} from '@/helpers/curseforge'
 import { get_categories, get_game_versions, get_loaders } from '@/helpers/tags'
 import { get_profile_worlds } from '@/helpers/worlds'
 import { injectContentInstall } from '@/providers/content-install'
@@ -1366,6 +1366,17 @@ provideBrowseManager({
 		path: `/project/${result.slug ?? result.project_id}`,
 		query: getProjectBrowseQuery(),
 	}),
+	getAuthorLink: (result: Labrinth.Search.v2.ResultSearchProject) => {
+		const cf = (result as { curseforge?: CurseForgeMod }).curseforge
+		if (cf) {
+			const author = cf.authors[0]
+			return author?.url ?? `https://www.curseforge.com/members/${author?.name ?? ''}`
+		}
+		if (result.organization_id == null) {
+			return `https://modrinth.com/user/${result.author_id ?? result.author}`
+		}
+		return `https://modrinth.com/organization/${result.organization_id}`
+	},
 	selectableProjectTypes,
 	showProjectTypeTabs: computed(() => !isServerContext.value),
 	variant: 'app',

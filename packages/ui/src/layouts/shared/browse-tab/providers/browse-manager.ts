@@ -50,6 +50,7 @@ export interface BrowseManagerContext {
 	getServerProjectLink: (
 		result: Labrinth.Search.v3.ResultSearchProject,
 	) => string | RouteLocationRaw
+	getAuthorLink: (result: Labrinth.Search.v2.ResultSearchProject) => string
 
 	selectableProjectTypes: ComputedRef<{ label: string; href: string; shown?: boolean }[]>
 	showProjectTypeTabs: ComputedRef<boolean>
