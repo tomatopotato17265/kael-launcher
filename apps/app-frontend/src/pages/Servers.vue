@@ -111,6 +111,7 @@ const progress = ref(0)
 const progressMessage = ref('')
 const resultUrl = ref('')
 const errorMessage = ref('')
+const buildWarning = ref('')
 let flowToken = 0
 
 let unlistenLoading: (() => void) | undefined
@@ -118,7 +119,14 @@ let unlistenLoading: (() => void) | undefined
 loading_listener((event: LoadingEvent) => {
 	if (event?.event?.type === 'server_download' && step.value === 'creating') {
 		progress.value = event.fraction ?? 1
-		if (event.message) progressMessage.value = event.message
+		if (event.message) {
+			progressMessage.value = event.message
+			// Progress messages are transient, but a server built on a non-stable
+			// Paper build stays that way — keep it visible through to the end.
+			if (event.message.startsWith('Warning:')) {
+				buildWarning.value = event.message.replace(/^Warning:\s*/, '')
+			}
+		}
 	}
 }).then((unlisten) => {
 	unlistenLoading = unlisten
@@ -137,6 +145,7 @@ function openWizard() {
 	progressMessage.value = ''
 	resultUrl.value = ''
 	errorMessage.value = ''
+	buildWarning.value = ''
 	wizardOpen.value = true
 }
 
@@ -206,6 +215,13 @@ const sortedServers = computed(() => servers.value ?? [])
 							<span class="status-dot" :class="{ online: isRunning(server.id) }" />
 							<span class="name">{{ server.name }}</span>
 							<span class="version">{{ server.mc_version }}</span>
+							<span
+								v-if="server.flavor === 'vanilla'"
+								class="version"
+								title="Created before Kael hosted on Paper. Players join with offline UUIDs, so whitelists and ops do not verify identity. Create a new server to get real Mojang accounts."
+							>
+								legacy
+							</span>
 						</div>
 						<div v-if="serverAddress(server)" class="tunnel">
 							<span class="tunnel-url">{{ serverAddress(server) }}</span>
@@ -239,7 +255,10 @@ const sortedServers = computed(() => servers.value ?? [])
 			<div class="wizard">
 				<template v-if="step === 'name'">
 					<h2>New Server</h2>
-					<p>We'll download the latest Minecraft server and set everything up for you.</p>
+					<p>
+						We'll download a Paper server and set everything up for you. Paper lets friends join
+						with their real Minecraft accounts, so whitelists and ops work.
+					</p>
 					<input
 						v-model="newName"
 						class="name-input"
@@ -279,6 +298,7 @@ const sortedServers = computed(() => servers.value ?? [])
 						<span>{{ resultUrl }}</span>
 						<button class="link-button" @click="copy(resultUrl)">Copy</button>
 					</div>
+					<p v-if="buildWarning" class="warning-text">{{ buildWarning }}</p>
 					<div class="wizard-actions">
 						<ButtonStyled color="brand">
 							<button @click="closeWizard">Done</button>
@@ -493,6 +513,10 @@ const sortedServers = computed(() => servers.value ?? [])
 
 .error-text {
 	color: var(--color-red);
+}
+
+.warning-text {
+	color: var(--color-orange, var(--color-red));
 }
 
 @keyframes slide {

@@ -2,6 +2,38 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use sqlx::sqlite::SqliteRow;
 
+/// Which server jar a hosted server runs, which in turn decides how its Gate
+/// tunnel is configured.
+///
+/// Only Paper speaks Velocity player-info forwarding, so only Paper servers can
+/// be given the real Mojang profile that Minekube Connect authenticates. Vanilla
+/// servers predate this and stay behind a Lite-mode Gate that pipes raw TCP —
+/// pointing a velocity-forwarding Gate at a vanilla backend would break them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ServerFlavor {
+    Vanilla,
+    Paper,
+}
+
+impl ServerFlavor {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Vanilla => "vanilla",
+            Self::Paper => "paper",
+        }
+    }
+
+    /// Unknown values decay to `Vanilla`, the conservative choice: it renders
+    /// the Lite-mode Gate config that every pre-existing server already runs.
+    fn from_str(value: &str) -> Self {
+        match value {
+            "paper" => Self::Paper,
+            _ => Self::Vanilla,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HostedServer {
     pub id: String,
@@ -14,6 +46,7 @@ pub struct HostedServer {
     /// `kael-abc123def456`. Persisted so the server keeps the same public
     /// address (`<endpoint_name>.play.minekube.net`) across restarts.
     pub endpoint_name: Option<String>,
+    pub flavor: ServerFlavor,
     pub server_pid: Option<i64>,
     pub gate_pid: Option<i64>,
     pub created: i64,
@@ -30,6 +63,7 @@ impl HostedServer {
             java_path: row.get("java_path"),
             port: row.get::<i64, _>("port") as u16,
             endpoint_name: row.get("endpoint_name"),
+            flavor: ServerFlavor::from_str(row.get("flavor")),
             server_pid: row.get("server_pid"),
             gate_pid: row.get("gate_pid"),
             created: row.get("created"),
@@ -44,7 +78,8 @@ impl HostedServer {
         let row = sqlx::query(
             "
             SELECT id, name, directory, mc_version, java_path, port,
-                   endpoint_name, server_pid, gate_pid, created, modified
+                   endpoint_name, flavor, server_pid, gate_pid, created,
+                   modified
             FROM hosted_servers
             WHERE id = ?
             ",
@@ -62,7 +97,8 @@ impl HostedServer {
         let rows = sqlx::query(
             "
             SELECT id, name, directory, mc_version, java_path, port,
-                   endpoint_name, server_pid, gate_pid, created, modified
+                   endpoint_name, flavor, server_pid, gate_pid, created,
+                   modified
             FROM hosted_servers
             ORDER BY created ASC
             ",
@@ -81,9 +117,9 @@ impl HostedServer {
             "
             INSERT INTO hosted_servers (
                 id, name, directory, mc_version, java_path, port,
-                endpoint_name, server_pid, gate_pid, created, modified
+                endpoint_name, flavor, server_pid, gate_pid, created, modified
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
                 name = excluded.name,
                 directory = excluded.directory,
@@ -91,6 +127,7 @@ impl HostedServer {
                 java_path = excluded.java_path,
                 port = excluded.port,
                 endpoint_name = excluded.endpoint_name,
+                flavor = excluded.flavor,
                 server_pid = excluded.server_pid,
                 gate_pid = excluded.gate_pid,
                 modified = excluded.modified
@@ -103,6 +140,7 @@ impl HostedServer {
         .bind(&self.java_path)
         .bind(self.port as i64)
         .bind(&self.endpoint_name)
+        .bind(self.flavor.as_str())
         .bind(self.server_pid)
         .bind(self.gate_pid)
         .bind(self.created)
@@ -127,6 +165,20 @@ impl HostedServer {
         .bind(id)
         .execute(exec)
         .await?;
+
+        Ok(())
+    }
+
+    pub async fn set_port(
+        id: &str,
+        port: u16,
+        exec: impl sqlx::Executor<'_, Database = sqlx::Sqlite>,
+    ) -> crate::Result<()> {
+        sqlx::query("UPDATE hosted_servers SET port = ? WHERE id = ?")
+            .bind(port as i64)
+            .bind(id)
+            .execute(exec)
+            .await?;
 
         Ok(())
     }

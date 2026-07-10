@@ -13,7 +13,9 @@
 //! server's own directory. Connect mints its own bearer token locally, so
 //! linking never requires a dashboard, an OAuth flow, or a browser.
 
+use super::DEFAULT_MAX_PLAYERS;
 use crate::State;
+use crate::state::{HostedServer, ServerFlavor};
 use crate::util::fetch::{fetch_advanced, write};
 use rand::Rng;
 use reqwest::Method;
@@ -69,36 +71,6 @@ const LOCAL_SERVER_POLL_INTERVAL: Duration = Duration::from_secs(2);
 /// own process (and no one else's) during orphan cleanup.
 pub const PROCESS_MARKER: &str = "gate_";
 
-/// How Gate treats player authentication for tunnelled sessions.
-///
-/// This is the one setting that changes user-visible behaviour, so it is
-/// explicit rather than implied by the rest of the config.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AuthMode {
-    /// Gate runs in Lite mode and pipes the connection straight through, so the
-    /// player authenticates end-to-end with the backend exactly as they did
-    /// over playit's raw TCP tunnel. The backend keeps `online-mode=true` and
-    /// sees real Mojang UUIDs, so existing worlds, ops and whitelists continue
-    /// to work unchanged.
-    ///
-    /// Requires the Connect edge to propose pass-through sessions. If it does
-    /// not, Gate rejects every session and logs the reason, which surfaces as a
-    /// [`ConnectError::LinkFailed`] rather than as silently wrong behaviour.
-    Passthrough,
-    /// Gate terminates login itself and Connect injects the authenticated
-    /// `GameProfile` from the session proposal. The backend must then run with
-    /// `online-mode=false` bound to loopback, and — because vanilla supports
-    /// neither Velocity nor BungeeCord forwarding — it will observe *offline*
-    /// UUIDs, which are not the players' real ones.
-    EdgeAuthenticated,
-}
-
-/// The authentication mode Kael hosts with.
-///
-/// `Passthrough` preserves the semantics the playit tunnel had. Flip this only
-/// if a live test shows the Connect edge never proposes pass-through sessions.
-pub const AUTH_MODE: AuthMode = AuthMode::Passthrough;
-
 #[derive(Debug, thiserror::Error)]
 pub enum ConnectError {
     #[error(
@@ -145,6 +117,12 @@ impl From<ConnectError> for crate::ErrorKind {
 pub struct EndpointIdentity {
     pub name: String,
     pub token: String,
+    /// Shared secret proving to a Paper backend that forwarded player identities
+    /// really came from this server's Gate. Optional so identity files written
+    /// before Velocity forwarding existed still deserialize; [`identity`]
+    /// backfills them.
+    #[serde(default)]
+    pub secret: Option<String>,
 }
 
 impl EndpointIdentity {
@@ -192,45 +170,78 @@ fn generate_slug() -> String {
         .collect()
 }
 
+fn generate_random(len: usize) -> String {
+    let mut rng = rand::thread_rng();
+    (0..len)
+        .map(|_| SLUG_ALPHABET[rng.gen_range(0..SLUG_ALPHABET.len())] as char)
+        .collect()
+}
+
 /// Connect mints tokens client-side: any unclaimed name becomes ours the first
 /// time we present a self-generated token for it.
 fn generate_token() -> String {
-    let mut rng = rand::thread_rng();
-    let body: String = (0..20)
-        .map(|_| SLUG_ALPHABET[rng.gen_range(0..SLUG_ALPHABET.len())] as char)
-        .collect();
-    format!("T-{body}")
+    format!("T-{}", generate_random(20))
+}
+
+/// The Velocity forwarding secret. Anyone who learns it can forge player
+/// identities to the backend, so it is long and never leaves this machine.
+fn generate_secret() -> String {
+    generate_random(32)
 }
 
 /// Loads a server's endpoint identity, creating and persisting one on first
 /// use. The identity file is the sole thing that keeps a server's hostname
 /// stable, so it is written before it is ever presented to Connect.
+///
+/// Identities written before Velocity forwarding existed carry no secret; they
+/// are backfilled and rewritten here rather than regenerated, so the server
+/// keeps its established public hostname.
 pub async fn identity(
     state: &State,
     id: &str,
 ) -> crate::Result<EndpointIdentity> {
     let path = server_dir(state, id).join("endpoint.json");
 
-    if let Ok(existing) = tokio::fs::read(&path).await
-        && let Ok(identity) =
-            serde_json::from_slice::<EndpointIdentity>(&existing)
-    {
-        return Ok(identity);
-    }
+    let existing = tokio::fs::read(&path)
+        .await
+        .ok()
+        .and_then(|bytes| {
+            serde_json::from_slice::<EndpointIdentity>(&bytes).ok()
+        })
+        .map(backfill_secret);
 
-    let identity = EndpointIdentity {
-        name: format!("{ENDPOINT_PREFIX}{}", generate_slug()),
-        token: generate_token(),
+    let (identity, needs_write) = match existing {
+        Some((identity, backfilled)) => (identity, backfilled),
+        None => (
+            EndpointIdentity {
+                name: format!("{ENDPOINT_PREFIX}{}", generate_slug()),
+                token: generate_token(),
+                secret: Some(generate_secret()),
+            },
+            true,
+        ),
     };
 
-    write(
-        &path,
-        &serde_json::to_vec_pretty(&identity)?,
-        &state.io_semaphore,
-    )
-    .await?;
+    if needs_write {
+        write(
+            &path,
+            &serde_json::to_vec_pretty(&identity)?,
+            &state.io_semaphore,
+        )
+        .await?;
+    }
 
     Ok(identity)
+}
+
+/// Returns the identity with a secret guaranteed present, and whether one had
+/// to be minted (meaning the file must be rewritten).
+fn backfill_secret(mut identity: EndpointIdentity) -> (EndpointIdentity, bool) {
+    if identity.secret.is_none() {
+        identity.secret = Some(generate_secret());
+        return (identity, true);
+    }
+    (identity, false)
 }
 
 fn asset_name() -> Result<String, ConnectError> {
@@ -250,7 +261,9 @@ fn asset_name() -> Result<String, ConnectError> {
     Ok(format!("gate_{version}_{suffix}"))
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+/// Shared with the Paper jar download, whose checksums are sha256 while
+/// `fetch_advanced` only verifies sha1.
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     digest.iter().fold(String::new(), |mut acc, byte| {
         use std::fmt::Write;
@@ -343,50 +356,102 @@ async fn reserve_loopback_port() -> crate::Result<u16> {
     Ok(listener.local_addr()?.port())
 }
 
-fn render_config(
-    endpoint: &str,
-    backend_port: u16,
-    bind_port: u16,
-    token_path: &Path,
-) -> String {
+/// Everything `render_config` needs to emit a server's Gate config.
+pub struct GateConfig<'a> {
+    pub endpoint: &'a str,
+    pub flavor: ServerFlavor,
+    /// Velocity forwarding secret. Ignored for [`ServerFlavor::Vanilla`].
+    pub secret: &'a str,
+    /// Shown in the server list. Only consulted for [`ServerFlavor::Paper`],
+    /// because Lite mode forwards pings to the backend instead of answering
+    /// them.
+    pub motd: &'a str,
+    pub max_players: u32,
+    pub backend_port: u16,
+    pub bind_port: u16,
+    pub token_path: &'a Path,
+}
+
+/// Escapes a value for a YAML double-quoted scalar, so a server name
+/// containing `"` or `\` (or a leading `#`, `:` etc.) cannot break the config.
+fn yaml_quote(value: &str) -> String {
+    let escaped = value.replace('\\', "\\\\").replace('"', "\\\"");
+    format!("\"{escaped}\"")
+}
+
+/// Renders the Gate config for one hosted server.
+///
+/// `enforcePassthrough` is always `false`. Connect's managed edge authenticates
+/// every real player itself and then proposes their session as
+/// `passthrough: false`; requiring passthrough made Gate reject every real join
+/// with `only allowing pass-through connections`, confirmed from Gate's logs.
+///
+/// The two flavors are genuinely different proxies, not a tweak of one:
+///
+/// - **Vanilla** runs Lite mode, which pipes raw TCP and discards the
+///   authenticated profile Connect injects, so the backend only ever sees
+///   offline UUIDs. Vanilla Minecraft speaks no forwarding protocol, so this is
+///   the best it can do. Lite forwards server-list pings to the backend.
+/// - **Paper** runs Gate as a full proxy. With `onlineMode: true` Gate consumes
+///   the `GameProfile` Connect injected instead of doing its own handshake, then
+///   forwards that real identity over Velocity modern forwarding. A full proxy
+///   answers server-list pings *itself*, so `status` must be set or players see
+///   Gate's default MOTD and a max of 1000.
+fn render_config(config: &GateConfig<'_>) -> String {
+    let GateConfig {
+        endpoint,
+        flavor,
+        secret,
+        motd,
+        max_players,
+        backend_port,
+        bind_port,
+        token_path,
+    } = *config;
+
     let token_path = token_path.to_string_lossy().replace('\\', "\\\\");
 
-    let core = match AUTH_MODE {
-        AuthMode::Passthrough => format!(
-            "  lite:\n    \
-			 enabled: true\n    \
-			 routes:\n      \
-			 - host: '*'\n        \
-			 backend: 127.0.0.1:{backend_port}\n        \
-			 fallback:\n          \
-			 motd: |\n            \
-			 §cThis Kael server is offline.\n            \
-			 §eAsk your friend to start hosting again.\n          \
-			 version:\n            \
-			 name: '§cOffline'\n            \
-			 protocol: -1\n"
+    let core = match flavor {
+        ServerFlavor::Vanilla => format!(
+            "  lite:\n\
+             \x20   enabled: true\n\
+             \x20   routes:\n\
+             \x20     - host: '*'\n\
+             \x20       backend: 127.0.0.1:{backend_port}\n\
+             \x20       fallback:\n\
+             \x20         motd: |\n\
+             \x20           §cThis Kael server is offline.\n\
+             \x20           §eAsk your friend to start hosting again.\n\
+             \x20         version:\n\
+             \x20           name: '§cOffline'\n\
+             \x20           protocol: -1\n"
         ),
-        AuthMode::EdgeAuthenticated => format!(
-            "  onlineMode: true\n  \
-			 servers:\n    \
-			 local: 127.0.0.1:{backend_port}\n  \
-			 try:\n    \
-			 - local\n"
+        ServerFlavor::Paper => format!(
+            "  onlineMode: true\n\
+             \x20 forwarding:\n\
+             \x20   mode: velocity\n\
+             \x20   velocitySecret: {secret}\n\
+             \x20 servers:\n\
+             \x20   local: 127.0.0.1:{backend_port}\n\
+             \x20 try:\n\
+             \x20   - local\n\
+             \x20 status:\n\
+             \x20   motd: {motd}\n\
+             \x20   showMaxPlayers: {max_players}\n",
+            motd = yaml_quote(motd),
         ),
     };
 
-    let enforce_passthrough = matches!(AUTH_MODE, AuthMode::Passthrough);
-
     format!(
-        "config:\n  \
-		 bind: 127.0.0.1:{bind_port}\n\
-		 {core}\n\
-		 connect:\n  \
-		 enabled: true\n  \
-		 name: {endpoint}\n  \
-		 enforcePassthrough: {enforce_passthrough}\n  \
-		 tokenFilePath: {token_path}\n\
-		 \napi:\n  enabled: false\n"
+        "config:\n\
+         \x20 bind: 127.0.0.1:{bind_port}\n\
+         {core}\n\
+         connect:\n\
+         \x20 enabled: true\n\
+         \x20 name: {endpoint}\n\
+         \x20 enforcePassthrough: false\n\
+         \x20 tokenFilePath: {token_path}\n\
+         \napi:\n  enabled: false\n"
     )
 }
 
@@ -427,9 +492,11 @@ async fn wait_for_local_server(port: u16) -> bool {
 /// refuses connections.
 pub async fn start(
     state: &State,
-    id: &str,
-    backend_port: u16,
+    server: &HostedServer,
 ) -> crate::Result<LinkedGate> {
+    let id = &server.id;
+    let backend_port = server.port;
+
     if !wait_for_local_server(backend_port).await {
         return Err(ConnectError::LocalServerUnreachable {
             port: backend_port,
@@ -455,8 +522,17 @@ pub async fn start(
     let bind_port = reserve_loopback_port().await?;
     write(
         &config_path,
-        render_config(&identity.name, backend_port, bind_port, &token_path)
-            .as_bytes(),
+        render_config(&GateConfig {
+            endpoint: &identity.name,
+            flavor: server.flavor,
+            secret: identity.secret.as_deref().unwrap_or_default(),
+            motd: &server.name,
+            max_players: DEFAULT_MAX_PLAYERS,
+            backend_port,
+            bind_port,
+            token_path: &token_path,
+        })
+        .as_bytes(),
         &state.io_semaphore,
     )
     .await?;
@@ -475,7 +551,7 @@ pub async fn start(
 
     match tokio::time::timeout(LINK_TIMEOUT, await_link(stdout, stderr)).await {
         Ok(Ok((stdout_lines, stderr_lines))) => {
-            drain_in_background(stdout_lines, stderr_lines);
+            drain_in_background(id.to_string(), stdout_lines, stderr_lines);
             Ok(LinkedGate {
                 endpoint: identity.name.clone(),
                 address: identity.public_address(),
@@ -533,13 +609,11 @@ async fn await_link(
         if line.contains("connected") && line.contains("watch") {
             return Ok((stdout, stderr));
         }
-        if line.contains("rejecting session proposal") {
-            return Err(
-                "Connect rejected the session; the edge may not support \
-				 pass-through authentication for this endpoint"
-                    .to_string(),
-            );
-        }
+        // Individual player session rejections ("rejecting session
+        // proposal") happen well after this point in Gate's own logs, once
+        // players start joining — not during the initial link handshake —
+        // so they surface later through the per-server log buffer
+        // (drain_in_background), not as a link failure here.
         if line.contains("connect: enabled=false") {
             return Err("Gate started with Connect disabled".to_string());
         }
@@ -547,10 +621,13 @@ async fn await_link(
 }
 
 /// Keeps consuming Gate's output for the rest of the process's life so its
-/// stdout/stderr pipes never fill up and stall it. Nothing here is
-/// user-facing — the per-server console shows the Minecraft server's output,
-/// not the tunnel's — so lines just go to the debug log.
+/// stdout/stderr pipes never fill up and stall it. Pushed into the same
+/// per-server log buffer the Minecraft process uses (prefixed so the two are
+/// distinguishable) rather than only debug-logged: a tunnel that drops mid
+/// session — as opposed to failing to link at all — has no other visible
+/// trace, and Gate is the only side of that failure we can actually observe.
 fn drain_in_background(
+    id: String,
     mut stdout: Lines<tokio::process::ChildStdout>,
     mut stderr: Lines<tokio::process::ChildStderr>,
 ) {
@@ -562,7 +639,9 @@ fn drain_in_background(
             };
 
             match line {
-                Ok(Some(line)) => tracing::debug!(target: "gate", "{line}"),
+                Ok(Some(line)) => {
+                    crate::state::push_log_line(&id, format!("[gate] {line}"));
+                }
                 _ => return,
             }
         }
@@ -605,11 +684,95 @@ bbbb  gate_0.68.26_darwin_arm64
         let identity = EndpointIdentity {
             name: "klabcdefghijklmn".to_string(),
             token: "T-x".to_string(),
+            secret: Some("s".to_string()),
         };
         assert_eq!(
             identity.public_address(),
             "klabcdefghijklmn.play.minekube.net"
         );
+    }
+
+    /// Identity files written before Velocity forwarding existed have no
+    /// `secret` key. They must still load, keep their established endpoint
+    /// name, and gain a secret.
+    #[test]
+    fn legacy_identity_deserializes_and_gains_a_secret() {
+        let legacy = r#"{"name":"klabcdefghijklmn","token":"T-old"}"#;
+        let parsed: EndpointIdentity = serde_json::from_str(legacy).unwrap();
+        assert!(parsed.secret.is_none());
+
+        let (backfilled, rewritten) = backfill_secret(parsed);
+        assert!(rewritten, "a minted secret must be persisted");
+        assert_eq!(backfilled.name, "klabcdefghijklmn");
+        assert_eq!(backfilled.token, "T-old");
+        assert!(!backfilled.secret.unwrap().is_empty());
+    }
+
+    #[test]
+    fn identity_with_a_secret_is_not_rewritten() {
+        let identity = EndpointIdentity {
+            name: "klabcdefghijklmn".to_string(),
+            token: "T-x".to_string(),
+            secret: Some("kept".to_string()),
+        };
+        let (identity, rewritten) = backfill_secret(identity);
+        assert!(!rewritten);
+        assert_eq!(identity.secret.as_deref(), Some("kept"));
+    }
+
+    fn config_for(flavor: ServerFlavor, motd: &str) -> String {
+        render_config(&GateConfig {
+            endpoint: "klabcdefghijklmn",
+            flavor,
+            secret: "supersecret",
+            motd,
+            max_players: 20,
+            backend_port: 25565,
+            bind_port: 40000,
+            token_path: Path::new("/tmp/connect.json"),
+        })
+    }
+
+    /// Paper servers get a full proxy that consumes Connect's authenticated
+    /// profile and forwards it; Lite mode would discard it.
+    #[test]
+    fn paper_config_forwards_real_identities() {
+        let config = config_for(ServerFlavor::Paper, "My Server");
+        assert!(config.contains("onlineMode: true"));
+        assert!(config.contains("mode: velocity"));
+        assert!(config.contains("velocitySecret: supersecret"));
+        assert!(config.contains("local: 127.0.0.1:25565"));
+        assert!(!config.contains("lite:"));
+        assert!(config.contains("enforcePassthrough: false"));
+    }
+
+    /// A full proxy answers server-list pings itself, so without `status` the
+    /// server list would show Gate's own MOTD and a max of 1000.
+    #[test]
+    fn paper_config_sets_status_so_pings_are_not_gates_defaults() {
+        let config = config_for(ServerFlavor::Paper, "My Server");
+        assert!(config.contains("status:"));
+        assert!(config.contains(r#"motd: "My Server""#));
+        assert!(config.contains("showMaxPlayers: 20"));
+    }
+
+    /// A server name is user input and lands in a YAML scalar.
+    #[test]
+    fn motd_is_escaped_into_a_quoted_scalar() {
+        let config = config_for(ServerFlavor::Paper, r#"we"rd: #name\"#);
+        assert!(config.contains(r#"motd: "we\"rd: #name\\""#));
+    }
+
+    /// Existing vanilla servers must keep the exact Lite config they run today;
+    /// pointing a velocity-forwarding Gate at a vanilla backend breaks them.
+    #[test]
+    fn vanilla_config_stays_on_lite_mode() {
+        let config = config_for(ServerFlavor::Vanilla, "My Server");
+        assert!(config.contains("lite:"));
+        assert!(config.contains("backend: 127.0.0.1:25565"));
+        assert!(!config.contains("forwarding:"));
+        assert!(!config.contains("velocitySecret"));
+        assert!(!config.contains("status:"));
     }
 
     /// Minekube's watch service hard-rejects endpoint names outside 4-16

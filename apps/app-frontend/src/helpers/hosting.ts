@@ -1,5 +1,11 @@
 import { invoke } from '@tauri-apps/api/core'
 
+/**
+ * Which server jar a hosted server runs. Only Paper can be given players' real
+ * Mojang identities; `vanilla` servers predate that and see offline UUIDs.
+ */
+export type ServerFlavor = 'vanilla' | 'paper'
+
 export interface HostedServer {
 	id: string
 	name: string
@@ -8,6 +14,7 @@ export interface HostedServer {
 	java_path: string | null
 	port: number
 	endpoint_name: string | null
+	flavor: ServerFlavor
 	created: number
 	modified: number
 }
