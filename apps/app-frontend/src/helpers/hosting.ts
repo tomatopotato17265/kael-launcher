@@ -7,22 +7,16 @@ export interface HostedServer {
 	mc_version: string
 	java_path: string | null
 	port: number
-	playit_tunnel_id: string | null
-	tunnel_url: string | null
-	custom_domain: string | null
-	cf_record_ids: string | null
+	endpoint_name: string | null
 	created: number
 	modified: number
 }
 
-export interface ClaimInfo {
-	code: string
-	url: string
-}
+/** Matches the public suffix every Minekube Connect endpoint resolves under. */
+const CONNECT_PUBLIC_SUFFIX = 'play.minekube.net'
 
-export interface ClaimPoll {
-	status: string
-	secret: string | null
+export function serverAddress(server: HostedServer): string | null {
+	return server.endpoint_name ? `${server.endpoint_name}.${CONNECT_PUBLIC_SUFFIX}` : null
 }
 
 export async function listServers(): Promise<HostedServer[]> {
@@ -63,20 +57,4 @@ export async function sendCommand(id: string, command: string): Promise<void> {
 
 export async function ensureTunnel(id: string): Promise<string> {
 	return await invoke('plugin:hosting|hosting_ensure_tunnel', { id })
-}
-
-export async function playitHasAccount(): Promise<boolean> {
-	return await invoke('plugin:hosting|hosting_playit_has_account')
-}
-
-export async function playitBeginClaim(): Promise<ClaimInfo> {
-	return await invoke('plugin:hosting|hosting_playit_begin_claim')
-}
-
-export async function playitPollClaim(code: string, guest: boolean): Promise<ClaimPoll> {
-	return await invoke('plugin:hosting|hosting_playit_poll_claim', { code, guest })
-}
-
-export async function playitGuestUrl(): Promise<string | null> {
-	return await invoke('plugin:hosting|hosting_playit_guest_url')
 }

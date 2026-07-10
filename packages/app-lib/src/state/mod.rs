@@ -79,7 +79,7 @@ pub struct State {
     /// Process manager
     pub process_manager: ProcessManager,
 
-    /// Manager for hosted Minecraft servers and their playit agents
+    /// Manager for hosted Minecraft servers and their Gate tunnels
     pub hosting_manager: HostingManager,
 
     // NOTE: we explicitly must NOT store the app identifier in the state object,

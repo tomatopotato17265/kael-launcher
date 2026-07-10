@@ -1,6 +1,5 @@
 use crate::api::Result;
 use tauri::plugin::TauriPlugin;
-use theseus::hosting::playit::{ClaimInfo, ClaimPoll};
 use theseus::prelude::*;
 
 pub fn init<R: tauri::Runtime>() -> TauriPlugin<R> {
@@ -16,10 +15,6 @@ pub fn init<R: tauri::Runtime>() -> TauriPlugin<R> {
             hosting_get_logs,
             hosting_send_command,
             hosting_ensure_tunnel,
-            hosting_playit_has_account,
-            hosting_playit_begin_claim,
-            hosting_playit_poll_claim,
-            hosting_playit_guest_url,
         ])
         .build()
 }
@@ -79,27 +74,4 @@ pub async fn hosting_send_command(id: String, command: String) -> Result<()> {
 #[tauri::command]
 pub async fn hosting_ensure_tunnel(id: String) -> Result<String> {
     Ok(hosting::ensure_tunnel(&id).await?)
-}
-
-#[tauri::command]
-pub async fn hosting_playit_has_account() -> Result<bool> {
-    Ok(hosting::playit_has_account().await?)
-}
-
-#[tauri::command]
-pub async fn hosting_playit_begin_claim() -> Result<ClaimInfo> {
-    Ok(hosting::playit_begin_claim().await?)
-}
-
-#[tauri::command]
-pub async fn hosting_playit_poll_claim(
-    code: String,
-    guest: bool,
-) -> Result<ClaimPoll> {
-    Ok(hosting::playit_poll_claim(code, guest).await?)
-}
-
-#[tauri::command]
-pub async fn hosting_playit_guest_url() -> Result<Option<String>> {
-    Ok(hosting::playit_guest_url().await?)
 }

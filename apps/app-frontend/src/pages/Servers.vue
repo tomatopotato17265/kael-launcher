@@ -2,7 +2,6 @@
 import { PlusIcon } from '@kael/assets'
 import { ButtonStyled, injectNotificationManager } from '@kael/ui'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
-import { openUrl } from '@tauri-apps/plugin-opener'
 import { computed, onUnmounted, reactive, ref } from 'vue'
 
 import ServerConsole from '@/components/ui/ServerConsole.vue'
@@ -12,11 +11,9 @@ import {
 	ensureTunnel,
 	type HostedServer,
 	listServers,
-	playitBeginClaim,
-	playitHasAccount,
-	playitPollClaim,
 	removeServer,
 	runningServers,
+	serverAddress,
 	startServer,
 	stopServer,
 } from '@/helpers/hosting'
@@ -49,18 +46,7 @@ async function activate(server: HostedServer) {
 	try {
 		await startServer(server.id)
 	} catch (error) {
-		let agentGone = false
-		try {
-			agentGone = !(await playitHasAccount())
-		} catch {
-			// If the check itself fails, fall through to the normal error
-		}
-
-		if (agentGone) {
-			openReclaim()
-		} else {
-			handleError(error)
-		}
+		handleError(error)
 	} finally {
 		busy[server.id] = false
 		invalidate()
@@ -116,19 +102,15 @@ function messageOf(error: unknown): string {
 	return String(error)
 }
 
-type Step = 'name' | 'creating' | 'playit' | 'tunnel' | 'done' | 'error'
+type Step = 'name' | 'creating' | 'tunnel' | 'done' | 'error'
 
 const wizardOpen = ref(false)
 const step = ref<Step>('name')
-const reclaiming = ref(false)
 const newName = ref('')
 const progress = ref(0)
 const progressMessage = ref('')
-const claimUrl = ref('')
-const claimStatus = ref('')
 const resultUrl = ref('')
 const errorMessage = ref('')
-const createdId = ref('')
 let flowToken = 0
 
 let unlistenLoading: (() => void) | undefined
@@ -147,40 +129,22 @@ onUnmounted(() => {
 	unlistenLoading?.()
 })
 
-function openReclaim() {
-	flowToken += 1
-	reclaiming.value = true
-	step.value = 'playit'
-	claimUrl.value = ''
-	claimStatus.value = ''
-	errorMessage.value = ''
-	createdId.value = ''
-	wizardOpen.value = true
-}
-
 function openWizard() {
 	flowToken += 1
-	reclaiming.value = false
 	step.value = 'name'
 	newName.value = ''
 	progress.value = 0
 	progressMessage.value = ''
-	claimUrl.value = ''
-	claimStatus.value = ''
 	resultUrl.value = ''
 	errorMessage.value = ''
-	createdId.value = ''
 	wizardOpen.value = true
 }
 
 function closeWizard() {
 	flowToken += 1
 	wizardOpen.value = false
-	reclaiming.value = false
 	invalidate()
 }
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 async function beginCreate() {
 	const name = newName.value.trim()
@@ -194,80 +158,24 @@ async function beginCreate() {
 	try {
 		const server = await createServer(name)
 		if (token !== flowToken) return
-		createdId.value = server.id
 		invalidate()
 
-		const hasAccount = await playitHasAccount()
+		step.value = 'tunnel'
+		await startServer(server.id)
 		if (token !== flowToken) return
-
-		if (hasAccount) {
-			await finishTunnel(server.id, token)
-		} else {
-			step.value = 'playit'
-		}
+		const url = await ensureTunnel(server.id)
+		if (token !== flowToken) return
+		resultUrl.value = url
+		step.value = 'done'
+		invalidate()
 	} catch (error) {
 		if (token !== flowToken) return
 		errorMessage.value = messageOf(error)
 		step.value = 'error'
 	}
-}
-
-async function setupPlayit(guest: boolean) {
-	const token = flowToken
-	try {
-		const info = await playitBeginClaim()
-		if (token !== flowToken) return
-		claimUrl.value = info.url
-		claimStatus.value = 'Waiting for you to approve playit in your browser…'
-		await openUrl(info.url)
-
-		while (token === flowToken && step.value === 'playit') {
-			const poll = await playitPollClaim(info.code, guest)
-			if (token !== flowToken) return
-
-			if (poll.secret) {
-				if (createdId.value) {
-					await finishTunnel(createdId.value, token)
-				} else {
-					closeWizard()
-				}
-				return
-			}
-
-			if (poll.status === 'rejected') {
-				throw new Error('playit setup was rejected in the browser.')
-			}
-
-			claimStatus.value =
-				poll.status === 'waiting_user'
-					? 'Approve this program in your browser…'
-					: 'Waiting for you to open the playit link…'
-			await sleep(2500)
-		}
-	} catch (error) {
-		if (token !== flowToken) return
-		errorMessage.value = messageOf(error)
-		step.value = 'error'
-	}
-}
-
-async function finishTunnel(id: string, token: number) {
-	step.value = 'tunnel'
-	const url = await ensureTunnel(id)
-	if (token !== flowToken) return
-	resultUrl.value = url
-	step.value = 'done'
-	invalidate()
 }
 
 const sortedServers = computed(() => servers.value ?? [])
-
-// The kaelmc domain is the only address the app ever shows - for every
-// player including the hosting machine; the raw playit tunnel URL stays
-// internal
-function primaryAddress(server: HostedServer): string | null {
-	return server.custom_domain
-}
 </script>
 
 <template>
@@ -275,7 +183,7 @@ function primaryAddress(server: HostedServer): string | null {
 		<div class="hosting-header">
 			<div>
 				<h1>Server Hosting</h1>
-				<p>Host a Minecraft server and share it with friends over a playit.gg tunnel.</p>
+				<p>Host a Minecraft server and share it with friends over Minekube Connect.</p>
 			</div>
 			<ButtonStyled color="brand">
 				<button @click="openWizard">
@@ -299,16 +207,11 @@ function primaryAddress(server: HostedServer): string | null {
 							<span class="name">{{ server.name }}</span>
 							<span class="version">{{ server.mc_version }}</span>
 						</div>
-						<div v-if="primaryAddress(server)" class="tunnel">
-							<span class="tunnel-url">{{ primaryAddress(server) }}</span>
-							<button class="link-button" @click="copy(primaryAddress(server)!)">Copy</button>
+						<div v-if="serverAddress(server)" class="tunnel">
+							<span class="tunnel-url">{{ serverAddress(server) }}</span>
+							<button class="link-button" @click="copy(serverAddress(server)!)">Copy</button>
 						</div>
 						<div v-else class="tunnel muted">No address yet — activate to create one.</div>
-						<div v-if="server.tunnel_url" class="tunnel advanced">
-							<span class="advanced-label">playit tunnel</span>
-							<span class="tunnel-url">{{ server.tunnel_url }}</span>
-							<button class="link-button" @click="copy(server.tunnel_url!)">Copy</button>
-						</div>
 					</div>
 					<div class="server-actions">
 						<ButtonStyled v-if="!isRunning(server.id)" color="green">
@@ -361,39 +264,9 @@ function primaryAddress(server: HostedServer): string | null {
 					</div>
 				</template>
 
-				<template v-else-if="step === 'playit'">
-					<h2>{{ reclaiming ? 'playit agent missing' : 'Connect playit.gg' }}</h2>
-					<p v-if="reclaiming" class="error-text">
-						Your playit agent no longer exists — it looks like it was deleted from the playit.gg
-						web portal. Your servers cannot start until you recreate it. Old tunnel addresses are
-						gone; new ones will be created the next time each server starts.
-					</p>
-					<p v-else>
-						playit.gg exposes your server to the internet. Pick how to set it up — a one-time
-						browser approval is required either way.
-					</p>
-					<div v-if="!claimUrl" class="playit-buttons">
-						<ButtonStyled color="brand">
-							<button @click="setupPlayit(true)">Quick setup (guest)</button>
-						</ButtonStyled>
-						<ButtonStyled>
-							<button @click="setupPlayit(false)">Use my playit.gg account</button>
-						</ButtonStyled>
-					</div>
-					<div v-else class="playit-waiting">
-						<p>{{ claimStatus }}</p>
-						<button class="link-button" @click="openUrl(claimUrl)">Reopen playit link</button>
-					</div>
-					<div class="wizard-actions">
-						<ButtonStyled>
-							<button @click="closeWizard">Cancel</button>
-						</ButtonStyled>
-					</div>
-				</template>
-
 				<template v-else-if="step === 'tunnel'">
-					<h2>Creating tunnel</h2>
-					<p>Reserving a public address from playit.gg…</p>
+					<h2>Linking your tunnel</h2>
+					<p>Connecting to the Minekube Connect network…</p>
 					<div class="progress">
 						<div class="progress-fill indeterminate" />
 					</div>
@@ -528,20 +401,6 @@ function primaryAddress(server: HostedServer): string | null {
 		color: var(--color-secondary);
 		font-family: inherit;
 	}
-
-	&.secondary {
-		color: var(--color-secondary);
-		font-size: var(--font-size-sm);
-	}
-
-	&.advanced {
-		color: var(--color-secondary);
-		font-size: var(--font-size-sm);
-	}
-
-	.advanced-label {
-		flex-shrink: 0;
-	}
 }
 
 .server-actions {
@@ -596,22 +455,11 @@ function primaryAddress(server: HostedServer): string | null {
 	color: var(--color-base);
 }
 
-.wizard-actions,
-.playit-buttons {
+.wizard-actions {
 	display: flex;
 	gap: var(--gap-sm);
 	justify-content: flex-end;
 	flex-wrap: wrap;
-}
-
-.playit-buttons {
-	justify-content: flex-start;
-}
-
-.playit-waiting {
-	display: flex;
-	flex-direction: column;
-	gap: var(--gap-xs);
 }
 
 .progress {

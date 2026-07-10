@@ -26,7 +26,7 @@ pub mod data {
         ContentItemProject, ContentItemVersion, Credentials, Dependency,
         DirectoryInfo, Hooks, HostedServer, JavaVersion, LinkedData,
         LinkedModpackInfo, MemorySettings, ModLoader, ModrinthCredentials,
-        Organization, OwnerType, PlayitAccount, ProcessMetadata, ProfileFile,
+        Organization, OwnerType, ProcessMetadata, ProfileFile,
         Project, ProjectType, ProjectV3, SearchResult, SearchResults,
         SearchResultsV3, Settings, TeamMember, User, UserFriend, Version,
         WindowSize,

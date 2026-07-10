@@ -194,11 +194,6 @@ impl DirectoryInfo {
         self.servers_dir().join(id)
     }
 
-    #[inline]
-    pub fn playit_dir(&self) -> PathBuf {
-        self.metadata_dir().join("playit")
-    }
-
     /// Get path from environment variable
     #[inline]
     fn env_path(name: &str) -> Option<PathBuf> {

@@ -36,11 +36,8 @@ fn main() {
                         "hosting_server_status",
                         "hosting_running_servers",
                         "hosting_get_logs",
+                        "hosting_send_command",
                         "hosting_ensure_tunnel",
-                        "hosting_playit_has_account",
-                        "hosting_playit_begin_claim",
-                        "hosting_playit_poll_claim",
-                        "hosting_playit_guest_url",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,
