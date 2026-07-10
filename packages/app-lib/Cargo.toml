@@ -44,6 +44,7 @@ futures = { workspace = true, features = ["alloc", "async-await"] }
 futures-lite = { workspace = true }
 heck = { workspace = true }
 hickory-resolver = { workspace = true }
+image = { workspace = true, features = ["png", "jpeg", "webp"] }
 indicatif = { workspace = true, optional = true }
 itertools = { workspace = true }
 notify = { workspace = true }

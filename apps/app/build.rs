@@ -38,6 +38,11 @@ fn main() {
                         "hosting_get_logs",
                         "hosting_send_command",
                         "hosting_ensure_tunnel",
+                        "hosting_update_server",
+                        "hosting_change_version",
+                        "hosting_set_server_icon",
+                        "hosting_clear_server_icon",
+                        "hosting_get_server_icon",
                     ])
                     .default_permission(
                         DefaultPermissionRule::AllowAllCommands,

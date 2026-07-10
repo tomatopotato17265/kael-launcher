@@ -13,7 +13,6 @@
 //! server's own directory. Connect mints its own bearer token locally, so
 //! linking never requires a dashboard, an OAuth flow, or a browser.
 
-use super::DEFAULT_MAX_PLAYERS;
 use crate::State;
 use crate::state::{HostedServer, ServerFlavor};
 use crate::util::fetch::{fetch_advanced, write};
@@ -70,6 +69,19 @@ const LOCAL_SERVER_POLL_INTERVAL: Duration = Duration::from_secs(2);
 /// Substring present in every Gate release asset name, used to recognize our
 /// own process (and no one else's) during orphan cleanup.
 pub const PROCESS_MARKER: &str = "gate_";
+
+/// Gate owns compression on the one link that crosses the internet: the player
+/// to the Connect edge and down to this machine. The Paper backend disables its
+/// own compression (`network-compression-threshold=-1`), because the only hop
+/// between it and Gate is loopback. The two settings are a pair — turning one
+/// off without the other either wastes CPU or sends the world uncompressed
+/// over a home upload link.
+///
+/// Packets under the threshold go uncompressed, since the header costs more
+/// than they save. Level 6 is zlib's default balance of ratio against CPU; the
+/// host is already running the game, so this is not the place to spend cycles.
+const COMPRESSION_THRESHOLD: u32 = 256;
+const COMPRESSION_LEVEL: u32 = 6;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConnectError {
@@ -435,6 +447,9 @@ fn render_config(config: &GateConfig<'_>) -> String {
              \x20   local: 127.0.0.1:{backend_port}\n\
              \x20 try:\n\
              \x20   - local\n\
+             \x20 compression:\n\
+             \x20   threshold: {COMPRESSION_THRESHOLD}\n\
+             \x20   level: {COMPRESSION_LEVEL}\n\
              \x20 status:\n\
              \x20   motd: {motd}\n\
              \x20   showMaxPlayers: {max_players}\n",
@@ -527,7 +542,7 @@ pub async fn start(
             flavor: server.flavor,
             secret: identity.secret.as_deref().unwrap_or_default(),
             motd: &server.name,
-            max_players: DEFAULT_MAX_PLAYERS,
+            max_players: server.max_players,
             backend_port,
             bind_port,
             token_path: &token_path,
@@ -754,6 +769,26 @@ bbbb  gate_0.68.26_darwin_arm64
         assert!(config.contains("status:"));
         assert!(config.contains(r#"motd: "My Server""#));
         assert!(config.contains("showMaxPlayers: 20"));
+    }
+
+    /// Gate must compress toward the player, because the Paper backend has its
+    /// own compression disabled for the loopback hop. If this block ever goes
+    /// missing, the world streams uncompressed over the host's upload link.
+    #[test]
+    fn paper_config_compresses_the_internet_facing_link() {
+        let config = config_for(ServerFlavor::Paper, "My Server");
+        assert!(config.contains("compression:"));
+        assert!(config.contains("threshold: 256"));
+        assert!(config.contains("level: 6"));
+    }
+
+    /// Lite mode pipes raw bytes, so compression is negotiated end-to-end
+    /// between the player and the backend; Gate must not sit in the middle of
+    /// it.
+    #[test]
+    fn vanilla_config_has_no_compression_block() {
+        let config = config_for(ServerFlavor::Vanilla, "My Server");
+        assert!(!config.contains("compression:"));
     }
 
     /// A server name is user input and lands in a YAML scalar.

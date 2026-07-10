@@ -47,6 +47,12 @@ pub struct HostedServer {
     /// address (`<endpoint_name>.play.minekube.net`) across restarts.
     pub endpoint_name: Option<String>,
     pub flavor: ServerFlavor,
+    /// Player cap. Written into `server.properties` and mirrored into Gate's
+    /// status ping, so it lives here rather than only in the properties file.
+    pub max_players: u32,
+    /// Chunk render radius. The dominant cost on the host's upload link, so it
+    /// is exposed as an editable setting.
+    pub view_distance: u32,
     pub server_pid: Option<i64>,
     pub gate_pid: Option<i64>,
     pub created: i64,
@@ -64,6 +70,8 @@ impl HostedServer {
             port: row.get::<i64, _>("port") as u16,
             endpoint_name: row.get("endpoint_name"),
             flavor: ServerFlavor::from_str(row.get("flavor")),
+            max_players: row.get::<i64, _>("max_players") as u32,
+            view_distance: row.get::<i64, _>("view_distance") as u32,
             server_pid: row.get("server_pid"),
             gate_pid: row.get("gate_pid"),
             created: row.get("created"),
@@ -78,8 +86,8 @@ impl HostedServer {
         let row = sqlx::query(
             "
             SELECT id, name, directory, mc_version, java_path, port,
-                   endpoint_name, flavor, server_pid, gate_pid, created,
-                   modified
+                   endpoint_name, flavor, max_players, view_distance,
+                   server_pid, gate_pid, created, modified
             FROM hosted_servers
             WHERE id = ?
             ",
@@ -97,8 +105,8 @@ impl HostedServer {
         let rows = sqlx::query(
             "
             SELECT id, name, directory, mc_version, java_path, port,
-                   endpoint_name, flavor, server_pid, gate_pid, created,
-                   modified
+                   endpoint_name, flavor, max_players, view_distance,
+                   server_pid, gate_pid, created, modified
             FROM hosted_servers
             ORDER BY created ASC
             ",
@@ -117,9 +125,10 @@ impl HostedServer {
             "
             INSERT INTO hosted_servers (
                 id, name, directory, mc_version, java_path, port,
-                endpoint_name, flavor, server_pid, gate_pid, created, modified
+                endpoint_name, flavor, max_players, view_distance,
+                server_pid, gate_pid, created, modified
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
                 name = excluded.name,
                 directory = excluded.directory,
@@ -128,6 +137,8 @@ impl HostedServer {
                 port = excluded.port,
                 endpoint_name = excluded.endpoint_name,
                 flavor = excluded.flavor,
+                max_players = excluded.max_players,
+                view_distance = excluded.view_distance,
                 server_pid = excluded.server_pid,
                 gate_pid = excluded.gate_pid,
                 modified = excluded.modified
@@ -141,6 +152,8 @@ impl HostedServer {
         .bind(self.port as i64)
         .bind(&self.endpoint_name)
         .bind(self.flavor.as_str())
+        .bind(self.max_players as i64)
+        .bind(self.view_distance as i64)
         .bind(self.server_pid)
         .bind(self.gate_pid)
         .bind(self.created)

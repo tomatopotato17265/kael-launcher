@@ -15,6 +15,8 @@ export interface HostedServer {
 	port: number
 	endpoint_name: string | null
 	flavor: ServerFlavor
+	max_players: number
+	view_distance: number
 	created: number
 	modified: number
 }
@@ -64,4 +66,37 @@ export async function sendCommand(id: string, command: string): Promise<void> {
 
 export async function ensureTunnel(id: string): Promise<string> {
 	return await invoke('plugin:hosting|hosting_ensure_tunnel', { id })
+}
+
+export async function updateServer(
+	id: string,
+	name: string,
+	maxPlayers: number,
+	viewDistance: number,
+): Promise<HostedServer> {
+	return await invoke('plugin:hosting|hosting_update_server', {
+		id,
+		name,
+		maxPlayers,
+		viewDistance,
+	})
+}
+
+export async function changeVersion(id: string, version: string): Promise<HostedServer> {
+	return await invoke('plugin:hosting|hosting_change_version', { id, version })
+}
+
+export async function setServerIcon(id: string, image: Uint8Array): Promise<void> {
+	return await invoke('plugin:hosting|hosting_set_server_icon', {
+		id,
+		image: Array.from(image),
+	})
+}
+
+export async function clearServerIcon(id: string): Promise<void> {
+	return await invoke('plugin:hosting|hosting_clear_server_icon', { id })
+}
+
+export async function getServerIcon(id: string): Promise<string | null> {
+	return await invoke('plugin:hosting|hosting_get_server_icon', { id })
 }

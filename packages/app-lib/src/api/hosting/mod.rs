@@ -323,17 +323,6 @@ pub async fn create_server(
     // Nothing outside this machine dials this port, so any free one works.
     // Re-checked on every start, since a port free now may not be free later.
     let port = allocate_port().await?;
-    write(
-        &directory.join("server.properties"),
-        default_server_properties(&name, port).as_bytes(),
-        &state.io_semaphore,
-    )
-    .await?;
-
-    // Generating the identity now means the forwarding secret exists before
-    // paper-global.yml and the Gate config are ever rendered from it.
-    connect::identity(&state, &id).await?;
-    write_paper_global(&state, &directory).await?;
 
     let now = Utc::now().timestamp();
     let server = HostedServer {
@@ -345,11 +334,26 @@ pub async fn create_server(
         port,
         endpoint_name: None,
         flavor: ServerFlavor::Paper,
+        max_players: DEFAULT_MAX_PLAYERS,
+        view_distance: DEFAULT_VIEW_DISTANCE as u32,
         server_pid: None,
         gate_pid: None,
         created: now,
         modified: now,
     };
+
+    write(
+        &directory.join("server.properties"),
+        initial_server_properties(&server).as_bytes(),
+        &state.io_semaphore,
+    )
+    .await?;
+
+    // Generating the identity now means the forwarding secret exists before
+    // paper-global.yml and the Gate config are ever rendered from it.
+    connect::identity(&state, &server.id).await?;
+    write_paper_global(&state, &directory).await?;
+
     server.upsert(&state.pool).await?;
 
     emit_loading(&loading_bar, 10.0, Some("Server created"))?;
@@ -372,6 +376,229 @@ pub async fn remove_server(id: String) -> crate::Result<()> {
     HostedServer::remove(&id, &state.pool).await?;
     crate::state::remove_log_buffer(&id);
     Ok(())
+}
+
+const MIN_VIEW_DISTANCE: u32 = 3;
+const MAX_VIEW_DISTANCE: u32 = 32;
+const MIN_MAX_PLAYERS: u32 = 1;
+const MAX_MAX_PLAYERS: u32 = 1000;
+
+/// Saves a server's editable settings. The properties file is rewritten
+/// immediately so a stopped server is already correct; a running server picks
+/// the changes up on its next start (Minecraft reads `server.properties` and
+/// Gate reads its status/config only at startup), so callers should tell the
+/// user a restart is needed for a live server.
+pub async fn update_server(
+    id: String,
+    name: String,
+    max_players: u32,
+    view_distance: u32,
+) -> crate::Result<HostedServer> {
+    let state = State::get().await?;
+
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err(crate::ErrorKind::InputError(
+            "Server name cannot be empty".to_string(),
+        )
+        .into());
+    }
+
+    let mut server =
+        HostedServer::get(&id, &state.pool).await?.ok_or_else(|| {
+            crate::ErrorKind::InputError(format!("Server {id} was not found"))
+        })?;
+
+    server.name = name;
+    server.max_players = max_players.clamp(MIN_MAX_PLAYERS, MAX_MAX_PLAYERS);
+    server.view_distance =
+        view_distance.clamp(MIN_VIEW_DISTANCE, MAX_VIEW_DISTANCE);
+    server.modified = Utc::now().timestamp();
+    server.upsert(&state.pool).await?;
+
+    enforce_managed_properties(
+        &state,
+        &PathBuf::from(&server.directory),
+        &server,
+    )
+    .await?;
+
+    Ok(server)
+}
+
+/// Sets the server's icon from an uploaded image of any common format,
+/// resizing it to the 64x64 PNG Minecraft requires. Players see it in their
+/// server list once they add the server's address there.
+pub async fn set_server_icon(
+    id: String,
+    image_bytes: Vec<u8>,
+) -> crate::Result<()> {
+    let state = State::get().await?;
+    let server =
+        HostedServer::get(&id, &state.pool).await?.ok_or_else(|| {
+            crate::ErrorKind::InputError(format!("Server {id} was not found"))
+        })?;
+
+    let png = tokio::task::spawn_blocking(move || icon_to_png(&image_bytes))
+        .await
+        .map_err(|e| {
+            crate::ErrorKind::InputError(format!(
+                "Failed to process the image: {e}"
+            ))
+        })??;
+
+    write(
+        &PathBuf::from(&server.directory).join("server-icon.png"),
+        &png,
+        &state.io_semaphore,
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// Removes the server's custom icon, reverting it to the default.
+pub async fn clear_server_icon(id: String) -> crate::Result<()> {
+    let state = State::get().await?;
+    let server =
+        HostedServer::get(&id, &state.pool).await?.ok_or_else(|| {
+            crate::ErrorKind::InputError(format!("Server {id} was not found"))
+        })?;
+
+    let path = PathBuf::from(&server.directory).join("server-icon.png");
+    let _ = tokio::fs::remove_file(&path).await;
+    Ok(())
+}
+
+/// Returns the server's current icon as a `data:` URI, or `None` if it has
+/// none, so the settings UI can preview it.
+pub async fn get_server_icon(id: String) -> crate::Result<Option<String>> {
+    use base64::Engine;
+
+    let state = State::get().await?;
+    let server =
+        HostedServer::get(&id, &state.pool).await?.ok_or_else(|| {
+            crate::ErrorKind::InputError(format!("Server {id} was not found"))
+        })?;
+
+    let path = PathBuf::from(&server.directory).join("server-icon.png");
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => {
+            let encoded =
+                base64::engine::general_purpose::STANDARD.encode(bytes);
+            Ok(Some(format!("data:image/png;base64,{encoded}")))
+        }
+        Err(_) => Ok(None),
+    }
+}
+
+/// Decodes an uploaded image and re-encodes it as the exact 64x64 PNG a
+/// Minecraft server icon must be. Runs on a blocking thread — decoding an
+/// attacker-sized image is CPU-bound.
+fn icon_to_png(bytes: &[u8]) -> crate::Result<Vec<u8>> {
+    use image::imageops::FilterType;
+
+    let image = image::load_from_memory(bytes).map_err(|e| {
+        crate::ErrorKind::InputError(format!(
+            "That image couldn't be read; try a PNG or JPEG: {e}"
+        ))
+    })?;
+
+    let resized = image.resize_exact(64, 64, FilterType::Lanczos3);
+
+    let mut out = std::io::Cursor::new(Vec::new());
+    resized
+        .write_to(&mut out, image::ImageFormat::Png)
+        .map_err(|e| {
+            crate::ErrorKind::InputError(format!(
+                "Failed to encode the server icon: {e}"
+            ))
+        })?;
+
+    Ok(out.into_inner())
+}
+
+/// Changes a server's Minecraft version by downloading the matching Paper jar.
+///
+/// The world is kept. Minecraft upgrades a world in place on first load and the
+/// change is one-way; a downgrade is unsupported and can corrupt the world, so
+/// the UI warns before calling this. Requires the server to be stopped, since
+/// its jar is being replaced underneath it.
+pub async fn change_version(
+    id: String,
+    version: String,
+) -> crate::Result<HostedServer> {
+    let state = State::get().await?;
+
+    if state.hosting_manager.is_running(&id) {
+        return Err(crate::ErrorKind::InputError(
+            "Stop the server before changing its Minecraft version."
+                .to_string(),
+        )
+        .into());
+    }
+
+    let mut server =
+        HostedServer::get(&id, &state.pool).await?.ok_or_else(|| {
+            crate::ErrorKind::InputError(format!("Server {id} was not found"))
+        })?;
+
+    // The vanilla manifest is the authority on which Java the version needs;
+    // Paper targets the same major.
+    let manifest: VersionManifest = fetch_json(
+        Method::GET,
+        VERSION_MANIFEST_URL,
+        None,
+        None,
+        None,
+        &state.fetch_semaphore,
+        &state.pool,
+    )
+    .await?;
+
+    let manifest_version = manifest
+        .versions
+        .iter()
+        .find(|v| v.id == version)
+        .ok_or_else(|| {
+        crate::ErrorKind::InputError(format!(
+            "Minecraft version {version} was not found"
+        ))
+    })?;
+
+    let info: VersionInfo = fetch_json(
+        Method::GET,
+        &manifest_version.url,
+        None,
+        None,
+        None,
+        &state.fetch_semaphore,
+        &state.pool,
+    )
+    .await?;
+
+    let java_major = info
+        .java_version
+        .as_ref()
+        .map(|j| j.major_version)
+        .unwrap_or(21);
+    let java_path = ensure_java(java_major).await?;
+
+    // Errors clearly if this version has no Paper build.
+    let jar = paper::download_jar(&state, &version, None).await?;
+    write(
+        &PathBuf::from(&server.directory).join("server.jar"),
+        &jar.bytes,
+        &state.io_semaphore,
+    )
+    .await?;
+
+    server.mc_version = version;
+    server.java_path = Some(java_path);
+    server.modified = Utc::now().timestamp();
+    server.upsert(&state.pool).await?;
+
+    Ok(server)
 }
 
 /// Links (or confirms) this server's Gate tunnel and returns its public
@@ -420,7 +647,7 @@ pub async fn start_server(id: String) -> crate::Result<()> {
         return Ok(());
     }
 
-    let server =
+    let mut server =
         HostedServer::get(&id, &state.pool).await?.ok_or_else(|| {
             crate::ErrorKind::InputError(format!("Server {id} was not found"))
         })?;
@@ -433,15 +660,11 @@ pub async fn start_server(id: String) -> crate::Result<()> {
     let directory = PathBuf::from(&server.directory);
     let max_memory = crate::api::jre::default_memory_max_mb();
 
-    let port = ensure_usable_port(&state, &server).await?;
+    // Reallocation persists the new port; reflect it locally so the properties
+    // and Gate config rendered below use it too.
+    server.port = ensure_usable_port(&state, &server).await?;
 
-    enforce_tunnel_compatible_properties(
-        &state,
-        &directory,
-        server.flavor,
-        port,
-    )
-    .await?;
+    enforce_managed_properties(&state, &directory, &server).await?;
 
     let mut server_command = Command::new(&java_path);
     server_command
@@ -487,7 +710,7 @@ pub async fn start_server(id: String) -> crate::Result<()> {
     // would treat it as active and every later Activate would short-circuit
     // on is_running without ever fixing it.
     let started = async {
-        wait_for_server_ready(&state, &id, port).await?;
+        wait_for_server_ready(&state, &id, server.port).await?;
         ensure_tunnel(&id).await
     }
     .await;
@@ -744,31 +967,53 @@ where
     }
 }
 
-/// Properties a hosted server must have to be joinable through the Connect
-/// tunnel. See [`default_server_properties`] for why.
+/// The `server.properties` keys Kael owns, computed from a server's stored
+/// settings. Everything not listed here — the user's own edits, comments — is
+/// left untouched by [`apply_managed_properties`].
 ///
-/// `server-port` is enforced rather than merely written once at creation: a
-/// server whose port was reallocated must actually listen on the new port, and
-/// `server.properties` is the only thing that decides that.
-fn required_properties(
-    flavor: ServerFlavor,
-    port: u16,
-) -> Vec<(&'static str, String)> {
-    let mut required = vec![
-        ("server-port", port.to_string()),
+/// These are enforced on every start, not written once, for two reasons: a
+/// reallocated port and an edited setting must actually reach the running
+/// server, and the tunnel-compatibility keys must never drift (getting
+/// `online-mode` wrong makes the server silently unjoinable). Editing a value
+/// here and restarting is the whole mechanism behind the settings UI.
+fn managed_properties(server: &HostedServer) -> Vec<(&'static str, String)> {
+    // Newlines/`=` would corrupt the properties line or inject keys.
+    let motd = server.name.replace(['\n', '\r', '='], " ");
+
+    let mut props = vec![
+        ("server-port", server.port.to_string()),
         ("online-mode", "false".to_string()),
         ("enforce-secure-profile", "false".to_string()),
+        ("max-players", server.max_players.to_string()),
+        ("view-distance", server.view_distance.to_string()),
+        // Simulation radius is a CPU lever, not a bandwidth one; keep it at or
+        // below the view distance so it is never the larger of the two.
+        (
+            "simulation-distance",
+            server
+                .view_distance
+                .min(DEFAULT_SIMULATION_DISTANCE as u32)
+                .to_string(),
+        ),
+        ("motd", motd),
     ];
 
-    // Paper additionally binds to loopback, because with `online-mode=false`
-    // the backend's own authentication is off and Gate is the only thing that
-    // should be able to reach it. Paper already rejects connections carrying
-    // no Velocity forwarding data; this is the second lock.
-    if flavor == ServerFlavor::Paper {
-        required.push(("server-ip", "127.0.0.1".to_string()));
+    // Paper binds to loopback, because with `online-mode=false` the backend's
+    // own authentication is off and Gate is the only thing that should reach
+    // it. Paper already rejects connections carrying no Velocity forwarding
+    // data; this is the second lock.
+    //
+    // Compression is disabled here because the only hop between Paper and Gate
+    // is loopback, where it buys nothing — leaving it on would compress every
+    // packet three times on the one machine already running the game. Gate
+    // compresses on the link that actually crosses the internet instead; see
+    // the `compression` block in `connect::render_config`.
+    if server.flavor == ServerFlavor::Paper {
+        props.push(("server-ip", "127.0.0.1".to_string()));
+        props.push(("network-compression-threshold", "-1".to_string()));
     }
 
-    required
+    props
 }
 
 /// The `proxies` block Paper needs in order to accept Velocity forwarding.
@@ -781,33 +1026,31 @@ const PAPER_GLOBAL_PROXIES: &str = "proxies:\n  \
                                     enabled: true\n    \
                                     online-mode: true\n";
 
-/// Rewrites any required property that a server's `server.properties` is
-/// missing or has set differently, then leaves everything else untouched.
+/// Rewrites any managed property that a server's `server.properties` is missing
+/// or has set differently, then leaves everything else untouched.
 ///
-/// Servers created before these settings were understood would otherwise stay
-/// permanently unjoinable, and the failure mode is a disconnect several
-/// seconds *after* a seemingly successful join, which is nearly impossible for
-/// a user to connect back to a stale config file.
-async fn enforce_tunnel_compatible_properties(
+/// Servers whose settings changed (or that predate a managed key) would
+/// otherwise run with stale values; for the tunnel keys the failure mode is a
+/// disconnect several seconds *after* a seemingly successful join, which is
+/// nearly impossible to trace back to a stale config file.
+async fn enforce_managed_properties(
     state: &State,
     directory: &Path,
-    flavor: ServerFlavor,
-    port: u16,
+    server: &HostedServer,
 ) -> crate::Result<()> {
     let path = directory.join("server.properties");
     let Ok(existing) = tokio::fs::read_to_string(&path).await else {
         return Ok(());
     };
 
-    let Some(repaired) = apply_required_properties(
-        &existing,
-        &required_properties(flavor, port),
-    ) else {
+    let Some(repaired) =
+        apply_required_properties(&existing, &managed_properties(server))
+    else {
         return Ok(());
     };
 
     tracing::info!(
-        "Repairing server.properties at {} for Connect tunnel compatibility",
+        "Repairing server.properties at {} to match saved settings",
         path.display()
     );
     write(&path, repaired.as_bytes(), &state.io_semaphore).await?;
@@ -921,29 +1164,28 @@ fn apply_required_properties(
     Some(contents)
 }
 
-/// Properties for a freshly created (Paper) server.
+/// Default chunk render radius for a new server.
 ///
-/// `online-mode=false` because Minekube Connect's edge authenticates the player
-/// itself before Gate is ever involved — the backend can never complete a
-/// second, independent Mojang handshake with that same client. Gate supplies the
-/// real, already-authenticated identity over Velocity forwarding instead.
+/// A hosted server streams every player's chunks up the host's home internet
+/// connection, which is asymmetric and far slower than a datacentre link. The
+/// chunk count grows with the square of the view distance — 10 means 441
+/// chunks per join, 8 means 289 — so this is the single biggest lever on how
+/// long a distant player waits to see the world. It is editable per server;
+/// this is only the starting point.
+const DEFAULT_VIEW_DISTANCE: u8 = 8;
+const DEFAULT_SIMULATION_DISTANCE: u8 = 6;
+
+/// The initial `server.properties` for a freshly created server.
 ///
-/// `enforce-secure-profile=false` governs chat signing, not identity. Real UUIDs
-/// flow regardless, and re-enabling it under a proxy-forwarded backend is
-/// historically fragile, so it stays off pending its own live test.
-///
-/// `server-ip=127.0.0.1` keeps the un-authenticating backend off the network;
-/// only Gate, on loopback, should be able to reach it.
-fn default_server_properties(name: &str, port: u16) -> String {
-    let motd = name.replace(['\n', '\r', '='], " ");
-    format!(
-        "server-port={port}\n\
-         server-ip=127.0.0.1\n\
-         online-mode=false\n\
-         enforce-secure-profile=false\n\
-         motd={motd}\n\
-         max-players={DEFAULT_MAX_PLAYERS}\n"
-    )
+/// Every key Kael manages is written from [`managed_properties`] so the file
+/// starts consistent with what the server is enforced to on each start;
+/// Minecraft fills in every other key with its own defaults on first boot.
+fn initial_server_properties(server: &HostedServer) -> String {
+    let mut contents = String::new();
+    for (key, value) in managed_properties(server) {
+        contents.push_str(&format!("{key}={value}\n"));
+    }
+    contents
 }
 
 #[cfg(test)]
@@ -952,19 +1194,39 @@ mod tests {
 
     const TEST_PORT: u16 = 25565;
 
+    fn test_server(flavor: ServerFlavor, port: u16) -> HostedServer {
+        HostedServer {
+            id: "test".to_string(),
+            name: "my server".to_string(),
+            directory: "/tmp/test".to_string(),
+            mc_version: "1.21".to_string(),
+            java_path: None,
+            port,
+            endpoint_name: None,
+            flavor,
+            max_players: 20,
+            view_distance: DEFAULT_VIEW_DISTANCE as u32,
+            server_pid: None,
+            gate_pid: None,
+            created: 0,
+            modified: 0,
+        }
+    }
+
     fn paper() -> Vec<(&'static str, String)> {
-        required_properties(ServerFlavor::Paper, TEST_PORT)
+        managed_properties(&test_server(ServerFlavor::Paper, TEST_PORT))
     }
 
     #[test]
     fn required_properties_are_added_when_missing() {
-        let repaired =
-            apply_required_properties("motd=hi\nmax-players=20\n", &paper())
-                .expect("missing properties should be added");
+        let repaired = apply_required_properties("difficulty=hard\n", &paper())
+            .expect("missing properties should be added");
         assert!(repaired.contains("online-mode=false"));
         assert!(repaired.contains("enforce-secure-profile=false"));
         assert!(repaired.contains("server-ip=127.0.0.1"));
-        assert!(repaired.contains("motd=hi"));
+        assert!(repaired.contains("max-players=20"));
+        // Unmanaged keys are still preserved.
+        assert!(repaired.contains("difficulty=hard"));
     }
 
     #[test]
@@ -980,40 +1242,51 @@ mod tests {
         assert!(!repaired.contains("enforce-secure-profile=true"));
     }
 
-    /// A user's own edits and comments must survive the repair untouched.
+    /// A user's own edits and comments must survive the repair untouched;
+    /// only managed keys change.
     #[test]
     fn unrelated_lines_are_preserved_verbatim() {
         let original = "#Minecraft server properties\n\
                         difficulty=hard\n\
                         online-mode=true\n\
-                        view-distance=32\n\
+                        spawn-protection=16\n\
                         enforce-secure-profile=false\n";
         let repaired = apply_required_properties(original, &paper()).unwrap();
         assert!(repaired.contains("#Minecraft server properties"));
         assert!(repaired.contains("difficulty=hard"));
-        assert!(repaired.contains("view-distance=32"));
+        assert!(repaired.contains("spawn-protection=16"));
+        // A managed key was still corrected.
+        assert!(repaired.contains("online-mode=false"));
+        assert!(!repaired.contains("online-mode=true"));
     }
 
     #[test]
     fn already_correct_properties_are_left_alone() {
-        let correct = "server-port=25565\nonline-mode=false\n\
-                       enforce-secure-profile=false\nserver-ip=127.0.0.1\n";
-        assert!(apply_required_properties(correct, &paper()).is_none());
+        let correct = initial_server_properties(&test_server(
+            ServerFlavor::Paper,
+            TEST_PORT,
+        ));
+        assert!(apply_required_properties(&correct, &paper()).is_none());
     }
 
-    /// `enforce-secure-profile` must not be mistaken for `online-mode` (or
-    /// vice versa) by a prefix match, and a key must match on the full name.
+    /// A key must match on its full name, so `online-mode-extra` is not taken
+    /// for `online-mode`.
     #[test]
     fn keys_match_exactly_not_by_prefix() {
-        let tricky = "online-mode-extra=true\nserver-port=25565\n\
-                      online-mode=false\nenforce-secure-profile=false\n\
-                      server-ip=127.0.0.1\n";
-        assert!(apply_required_properties(tricky, &paper()).is_none());
+        let correct = initial_server_properties(&test_server(
+            ServerFlavor::Paper,
+            TEST_PORT,
+        ));
+        let tricky = format!("online-mode-extra=true\n{correct}");
+        assert!(apply_required_properties(&tricky, &paper()).is_none());
     }
 
     #[test]
     fn generated_defaults_need_no_repair() {
-        let defaults = default_server_properties("my server", TEST_PORT);
+        let defaults = initial_server_properties(&test_server(
+            ServerFlavor::Paper,
+            TEST_PORT,
+        ));
         assert!(apply_required_properties(&defaults, &paper()).is_none());
     }
 
@@ -1021,8 +1294,10 @@ mod tests {
     /// port, so `server.properties` has to be rewritten to match.
     #[test]
     fn a_reallocated_port_is_written_into_server_properties() {
-        let existing = default_server_properties("my server", 25565);
-        let moved = required_properties(ServerFlavor::Paper, 41234);
+        let existing =
+            initial_server_properties(&test_server(ServerFlavor::Paper, 25565));
+        let moved =
+            managed_properties(&test_server(ServerFlavor::Paper, 41234));
 
         let repaired = apply_required_properties(&existing, &moved)
             .expect("a changed port must rewrite server.properties");
@@ -1033,14 +1308,51 @@ mod tests {
         assert!(repaired.contains("server-ip=127.0.0.1"));
     }
 
+    /// An edited player cap and view distance must reach the properties file.
+    #[test]
+    fn edited_settings_are_written_into_server_properties() {
+        let existing = initial_server_properties(&test_server(
+            ServerFlavor::Paper,
+            TEST_PORT,
+        ));
+
+        let mut edited = test_server(ServerFlavor::Paper, TEST_PORT);
+        edited.name = "Renamed".to_string();
+        edited.max_players = 8;
+        edited.view_distance = 6;
+
+        let repaired =
+            apply_required_properties(&existing, &managed_properties(&edited))
+                .expect("changed settings must rewrite server.properties");
+        assert!(repaired.contains("max-players=8"));
+        assert!(repaired.contains("view-distance=6"));
+        assert!(repaired.contains("motd=Renamed"));
+    }
+
+    /// Simulation distance must never exceed the (possibly lowered) view
+    /// distance.
+    #[test]
+    fn simulation_distance_is_capped_at_view_distance() {
+        let mut server = test_server(ServerFlavor::Paper, TEST_PORT);
+        server.view_distance = 4;
+        let props = managed_properties(&server);
+        let sim = props
+            .iter()
+            .find(|(k, _)| *k == "simulation-distance")
+            .map(|(_, v)| v.as_str());
+        assert_eq!(sim, Some("4"));
+    }
+
     /// `server-port` must not collide with Minecraft's own `query.port` or
     /// `rcon.port` keys, which share the "port" substring.
     #[test]
     fn server_port_does_not_clobber_other_port_keys() {
         let existing = "query.port=25565\nrcon.port=25575\n\
                         server-port=25565\nonline-mode=false\n\
-                        enforce-secure-profile=false\nserver-ip=127.0.0.1\n";
-        let moved = required_properties(ServerFlavor::Paper, 41234);
+                        enforce-secure-profile=false\nserver-ip=127.0.0.1\n\
+                        network-compression-threshold=-1\n";
+        let moved =
+            managed_properties(&test_server(ServerFlavor::Paper, 41234));
         let repaired = apply_required_properties(existing, &moved).unwrap();
 
         assert!(repaired.contains("server-port=41234"));
@@ -1048,16 +1360,40 @@ mod tests {
         assert!(repaired.contains("rcon.port=25575"));
     }
 
-    /// Existing vanilla servers must not gain `server-ip`; binding them to
-    /// loopback is a Paper-only decision.
+    /// Vanilla servers must not gain the Paper-only loopback bind or
+    /// compression override.
     #[test]
-    fn vanilla_servers_do_not_get_a_loopback_bind() {
-        let vanilla = required_properties(ServerFlavor::Vanilla, TEST_PORT);
+    fn vanilla_servers_stay_off_paper_only_keys() {
+        let vanilla =
+            managed_properties(&test_server(ServerFlavor::Vanilla, TEST_PORT));
         assert!(vanilla.iter().all(|(key, _)| *key != "server-ip"));
+        assert!(
+            vanilla
+                .iter()
+                .all(|(key, _)| *key != "network-compression-threshold")
+        );
+    }
 
-        let existing = "server-port=25565\nonline-mode=false\n\
-                        enforce-secure-profile=false\n";
-        assert!(apply_required_properties(existing, &vanilla).is_none());
+    /// A Minecraft server icon must be exactly a 64x64 PNG regardless of what
+    /// the user uploaded, so any-size input has to come back out at 64x64.
+    #[test]
+    fn icon_is_resized_to_a_64x64_png() {
+        // A deliberately not-64x64, not-square source.
+        let source = image::RgbaImage::from_pixel(10, 30, image::Rgba([9; 4]));
+        let mut source_png = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(source)
+            .write_to(&mut source_png, image::ImageFormat::Png)
+            .unwrap();
+
+        let out = icon_to_png(&source_png.into_inner()).unwrap();
+
+        let decoded = image::load_from_memory(&out).unwrap();
+        assert_eq!((decoded.width(), decoded.height()), (64, 64));
+    }
+
+    #[test]
+    fn icon_rejects_non_images() {
+        assert!(icon_to_png(b"this is not an image").is_err());
     }
 
     #[test]

@@ -15,6 +15,11 @@ pub fn init<R: tauri::Runtime>() -> TauriPlugin<R> {
             hosting_get_logs,
             hosting_send_command,
             hosting_ensure_tunnel,
+            hosting_update_server,
+            hosting_change_version,
+            hosting_set_server_icon,
+            hosting_clear_server_icon,
+            hosting_get_server_icon,
         ])
         .build()
 }
@@ -74,4 +79,42 @@ pub async fn hosting_send_command(id: String, command: String) -> Result<()> {
 #[tauri::command]
 pub async fn hosting_ensure_tunnel(id: String) -> Result<String> {
     Ok(hosting::ensure_tunnel(&id).await?)
+}
+
+#[tauri::command]
+pub async fn hosting_update_server(
+    id: String,
+    name: String,
+    max_players: u32,
+    view_distance: u32,
+) -> Result<HostedServer> {
+    Ok(hosting::update_server(id, name, max_players, view_distance).await?)
+}
+
+#[tauri::command]
+pub async fn hosting_change_version(
+    id: String,
+    version: String,
+) -> Result<HostedServer> {
+    Ok(hosting::change_version(id, version).await?)
+}
+
+#[tauri::command]
+pub async fn hosting_set_server_icon(
+    id: String,
+    image: Vec<u8>,
+) -> Result<()> {
+    hosting::set_server_icon(id, image).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn hosting_clear_server_icon(id: String) -> Result<()> {
+    hosting::clear_server_icon(id).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn hosting_get_server_icon(id: String) -> Result<Option<String>> {
+    Ok(hosting::get_server_icon(id).await?)
 }
