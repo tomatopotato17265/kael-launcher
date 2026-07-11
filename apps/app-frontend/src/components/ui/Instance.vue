@@ -151,7 +151,7 @@ onUnmounted(() => unlisten())
 			<div class="flex items-center">
 				<ButtonStyled v-if="playing" color="red" circular @mousehover="checkProcess">
 					<button v-tooltip="'Stop'" @click="(e) => stop(e, 'InstanceCard')">
-						<StopCircleIcon />
+						<StopCircleIcon class="!w-6 !h-6" />
 					</button>
 				</ButtonStyled>
 				<ButtonStyled v-else-if="modLoading" color="standard" circular>
@@ -183,58 +183,19 @@ onUnmounted(() => unlisten())
 	</template>
 	<div v-else>
 		<div
-			class="button-base bg-bg-raised p-4 rounded-xl flex gap-3 group"
+			class="button-base bg-bg-raised p-4 rounded-xl flex items-center gap-3 group"
 			@click="seeInstance"
 			@mouseenter="checkProcess"
 		>
-			<div class="relative flex items-center justify-center">
-				<Avatar
-					size="48px"
-					:src="instance.icon_path ? convertFileSrc(instance.icon_path) : null"
-					:tint-by="instance.path"
-					alt="Mod card"
-					:class="`transition-all ${modLoading || installing ? `brightness-[0.25] scale-[0.85]` : `group-hover:brightness-75`}`"
-				/>
-				<div class="absolute inset-0 flex items-center justify-center">
-					<ButtonStyled v-if="playing" size="large" color="red" circular>
-						<button
-							v-tooltip="'Stop'"
-							:class="{ 'scale-100 opacity-100': playing }"
-							class="transition-all scale-75 origin-bottom opacity-0 card-shadow"
-							@click="(e) => stop(e, 'InstanceCard')"
-							@mousehover="checkProcess"
-						>
-							<StopCircleIcon />
-						</button>
-					</ButtonStyled>
-					<SpinnerIcon
-						v-else-if="modLoading || installing"
-						v-tooltip="modLoading ? 'Instance is loading...' : 'Installing...'"
-						class="animate-spin w-8 h-8"
-						tabindex="-1"
-					/>
-					<ButtonStyled v-else-if="!installed" size="large" color="brand" circular>
-						<button
-							v-tooltip="'Repair'"
-							class="transition-all scale-75 group-hover:scale-100 group-focus-within:scale-100 origin-bottom opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 card-shadow"
-							@click="(e) => repair(e)"
-						>
-							<DownloadIcon />
-						</button>
-					</ButtonStyled>
-					<ButtonStyled v-else size="large" color="brand" circular>
-						<button
-							v-tooltip="'Play'"
-							class="transition-all scale-75 group-hover:scale-100 group-focus-within:scale-100 origin-bottom opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 card-shadow"
-							@click="(e) => play(e, 'InstanceCard')"
-							@mousehover="checkProcess"
-						>
-							<PlayIcon class="translate-x-[2px]" />
-						</button>
-					</ButtonStyled>
-				</div>
-			</div>
-			<div class="flex flex-col gap-1">
+			<Avatar
+				size="48px"
+				:src="instance.icon_path ? convertFileSrc(instance.icon_path) : null"
+				:tint-by="instance.path"
+				alt="Mod card"
+				class="shrink-0"
+				:class="`transition-all ${modLoading || installing ? `brightness-[0.25] scale-[0.85]` : `group-hover:brightness-75`}`"
+			/>
+			<div class="flex flex-col gap-1 min-w-0 flex-1">
 				<p class="m-0 text-md font-bold text-contrast leading-tight line-clamp-1">
 					{{ instance.name }}
 				</p>
@@ -244,6 +205,44 @@ onUnmounted(() => unlisten())
 						{{ instance.loader }} {{ instance.game_version }}
 					</span>
 				</div>
+			</div>
+			<div class="flex items-center justify-center shrink-0">
+				<ButtonStyled v-if="playing" size="large" color="red" circular>
+					<button
+						v-tooltip="'Stop'"
+						:class="{ 'scale-100 opacity-100': playing }"
+						class="transition-all scale-75 opacity-0 card-shadow"
+						@click="(e) => stop(e, 'InstanceCard')"
+						@mousehover="checkProcess"
+					>
+						<StopCircleIcon class="!w-7 !h-7" />
+					</button>
+				</ButtonStyled>
+				<SpinnerIcon
+					v-else-if="modLoading || installing"
+					v-tooltip="modLoading ? 'Instance is loading...' : 'Installing...'"
+					class="animate-spin w-8 h-8"
+					tabindex="-1"
+				/>
+				<ButtonStyled v-else-if="!installed" size="large" color="brand" circular>
+					<button
+						v-tooltip="'Repair'"
+						class="transition-all scale-75 group-hover:scale-100 group-focus-within:scale-100 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 card-shadow"
+						@click="(e) => repair(e)"
+					>
+						<DownloadIcon />
+					</button>
+				</ButtonStyled>
+				<ButtonStyled v-else size="large" color="brand" circular>
+					<button
+						v-tooltip="'Play'"
+						class="transition-all scale-75 group-hover:scale-100 group-focus-within:scale-100 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 card-shadow"
+						@click="(e) => play(e, 'InstanceCard')"
+						@mousehover="checkProcess"
+					>
+						<PlayIcon class="translate-x-[2px]" />
+					</button>
+				</ButtonStyled>
 			</div>
 		</div>
 	</div>
