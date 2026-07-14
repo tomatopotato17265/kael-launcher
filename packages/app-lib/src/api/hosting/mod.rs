@@ -1,4 +1,5 @@
 pub mod connect;
+pub mod freedomchat;
 pub mod paper;
 
 use crate::State;
@@ -353,6 +354,7 @@ pub async fn create_server(
     // paper-global.yml and the Gate config are ever rendered from it.
     connect::identity(&state, &server.id).await?;
     write_paper_global(&state, &directory).await?;
+    ensure_freedomchat(&state, &directory, &server.mc_version).await?;
 
     server.upsert(&state.pool).await?;
 
@@ -593,6 +595,10 @@ pub async fn change_version(
     )
     .await?;
 
+    // The FreedomChat jar was resolved for the old version; drop it so the next
+    // start fetches one matching the new Minecraft version.
+    remove_freedomchat_jars(&PathBuf::from(&server.directory)).await?;
+
     server.mc_version = version;
     server.java_path = Some(java_path);
     server.modified = Utc::now().timestamp();
@@ -680,6 +686,7 @@ pub async fn start_server(id: String) -> crate::Result<()> {
 
     if server.flavor == ServerFlavor::Paper {
         write_paper_global(&state, &directory).await?;
+        ensure_freedomchat(&state, &directory, &server.mc_version).await?;
 
         // Paper lets PAPER_VELOCITY_SECRET override the config value, so the
         // secret Gate signs forwarded profiles with never touches disk here.
@@ -1074,6 +1081,84 @@ async fn write_paper_global(
     Ok(())
 }
 
+/// True for a filename that is a FreedomChat plugin jar, e.g.
+/// `FreedomChat-Paper-1.7.9.jar`.
+fn is_freedomchat_jar(file_name: &str) -> bool {
+    let lower = file_name.to_ascii_lowercase();
+    lower.starts_with("freedomchat") && lower.ends_with(".jar")
+}
+
+/// Whether `plugins/` already holds a FreedomChat jar.
+async fn has_freedomchat_jar(plugins: &Path) -> bool {
+    let Ok(mut entries) = crate::util::io::read_dir(plugins).await else {
+        return false;
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        if is_freedomchat_jar(&entry.file_name().to_string_lossy()) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Drops the FreedomChat plugin into `plugins/` so Minecraft 1.19+ secure chat
+/// can't silently discard the messages players send each other.
+///
+/// Connect's managed edge re-injects each player's profile, which breaks the
+/// signature chain clients use to validate peer chat; FreedomChat sidesteps it
+/// by rewriting chat as system messages. See [`freedomchat`] for the full why.
+///
+/// Idempotent (skips when a jar is already present) and never fatal: a
+/// Minecraft version FreedomChat hasn't shipped for only logs a warning, since
+/// a running server with broken chat still beats a server that won't start.
+async fn ensure_freedomchat(
+    state: &State,
+    directory: &Path,
+    mc_version: &str,
+) -> crate::Result<()> {
+    let plugins = directory.join("plugins");
+    if has_freedomchat_jar(&plugins).await {
+        return Ok(());
+    }
+
+    match freedomchat::download_plugin(state, mc_version).await? {
+        Some(jar) => {
+            crate::util::io::create_dir_all(&plugins).await?;
+            write(
+                &plugins.join(&jar.filename),
+                &jar.bytes,
+                &state.io_semaphore,
+            )
+            .await?;
+        }
+        None => {
+            tracing::warn!(
+                "No FreedomChat build is available for Minecraft {mc_version}; \
+                 hosted-server chat may drop the messages players send each \
+                 other."
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Removes any FreedomChat jar from `plugins/`, so a Minecraft version change
+/// re-resolves a matching build on the next start rather than keeping a jar
+/// built for the old version.
+async fn remove_freedomchat_jars(directory: &Path) -> crate::Result<()> {
+    let plugins = directory.join("plugins");
+    let Ok(mut entries) = crate::util::io::read_dir(&plugins).await else {
+        return Ok(());
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        if is_freedomchat_jar(&entry.file_name().to_string_lossy()) {
+            crate::util::io::remove_file(entry.path()).await?;
+        }
+    }
+    Ok(())
+}
+
 /// Returns the repaired contents of `paper-global.yml`, or `None` when the
 /// `proxies` block already matches [`PAPER_GLOBAL_PROXIES`].
 ///
@@ -1465,5 +1550,71 @@ mod tests {
             .expect("allocate_port must hand back a bindable port");
         drop(claim);
         drop(occupied);
+    }
+
+    #[test]
+    fn freedomchat_jar_is_recognised_by_name() {
+        assert!(is_freedomchat_jar("FreedomChat-Paper-1.7.9.jar"));
+        assert!(is_freedomchat_jar("freedomchat-paper-1.7.9.jar"));
+        assert!(!is_freedomchat_jar("FreedomChat-Paper-1.7.9.jar.disabled"));
+        assert!(!is_freedomchat_jar("SomeOtherPlugin.jar"));
+        assert!(!is_freedomchat_jar("FreedomChat"));
+    }
+
+    /// `ensure_freedomchat` must be a no-op — no download — once a jar is
+    /// present, so restarts don't refetch it. `has_freedomchat_jar` is the
+    /// gate that makes that true.
+    #[tokio::test]
+    async fn an_existing_freedomchat_jar_is_detected() {
+        let dir = tempfile::tempdir().unwrap();
+        let plugins = dir.path().join("plugins");
+
+        assert!(
+            !has_freedomchat_jar(&plugins).await,
+            "a missing plugins dir must not read as present"
+        );
+
+        tokio::fs::create_dir_all(&plugins).await.unwrap();
+        assert!(
+            !has_freedomchat_jar(&plugins).await,
+            "an empty plugins dir must not read as present"
+        );
+
+        tokio::fs::write(plugins.join("SomeOtherPlugin.jar"), b"x")
+            .await
+            .unwrap();
+        assert!(
+            !has_freedomchat_jar(&plugins).await,
+            "an unrelated plugin must not read as FreedomChat"
+        );
+
+        tokio::fs::write(plugins.join("FreedomChat-Paper-1.7.9.jar"), b"x")
+            .await
+            .unwrap();
+        assert!(
+            has_freedomchat_jar(&plugins).await,
+            "a present FreedomChat jar must be detected"
+        );
+    }
+
+    /// A version change drops the jar built for the old version, so the next
+    /// start resolves one matching the new version.
+    #[tokio::test]
+    async fn version_change_removes_the_freedomchat_jar() {
+        let dir = tempfile::tempdir().unwrap();
+        let plugins = dir.path().join("plugins");
+        tokio::fs::create_dir_all(&plugins).await.unwrap();
+        tokio::fs::write(plugins.join("FreedomChat-Paper-1.7.9.jar"), b"x")
+            .await
+            .unwrap();
+        tokio::fs::write(plugins.join("KeepMe.jar"), b"x").await.unwrap();
+
+        remove_freedomchat_jars(dir.path()).await.unwrap();
+
+        assert!(!has_freedomchat_jar(&plugins).await);
+        assert!(
+            plugins.join("KeepMe.jar").exists(),
+            "only FreedomChat jars are removed"
+        );
     }
 }
