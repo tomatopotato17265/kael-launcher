@@ -34,6 +34,12 @@ If you discover a security vulnerability within our codebase, please follow our 
 
 If you need help with the Modrinth web interface or app, please visit our [support page](https://support.modrinth.com). For general inquiries, you can also join our [Discord server](https://discord.modrinth.com).
 
+## Credits
+
+Special thanks to these members for their contributions to Kael.
+- Squid (@imjustasquid4325) on Discord for making Kael's logo.
+- [Minekube Connect](https://connect.minekube.com) for providing the servers needed for multiplayer server hosting.
+
 ## License
 
 All packages in this repository are licensed under their respective licenses. Refer to the LICENSE file in each package for more information.
