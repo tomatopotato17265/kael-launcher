@@ -4,7 +4,8 @@ import { ButtonStyled, injectNotificationManager } from '@kael/ui'
 import { useQuery, useQueryClient } from '@tanstack/vue-query'
 import { open } from '@tauri-apps/plugin-dialog'
 import { readFile } from '@tauri-apps/plugin-fs'
-import { computed, onUnmounted, reactive, ref } from 'vue'
+import { computed, onUnmounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 
 import ServerConsole from '@/components/ui/ServerConsole.vue'
 import { loading_listener } from '@/helpers/events.js'
@@ -28,11 +29,32 @@ import { get_game_versions } from '@/helpers/metadata'
 
 const { handleError } = injectNotificationManager()
 const queryClient = useQueryClient()
+const route = useRoute()
 
 const { data: servers } = useQuery({
 	queryKey: ['hosting', 'servers'],
 	queryFn: () => listServers(),
 })
+
+const serverCardRefs = new Map<string, HTMLElement>()
+function setServerCardRef(id: string, el: unknown) {
+	if (el instanceof HTMLElement) {
+		serverCardRefs.set(id, el)
+	} else {
+		serverCardRefs.delete(id)
+	}
+}
+
+watch(
+	() => [route.query.server, servers.value] as const,
+	([id]) => {
+		if (typeof id !== 'string') {
+			return
+		}
+		serverCardRefs.get(id)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+	},
+	{ immediate: true },
+)
 
 const { data: running } = useQuery({
 	queryKey: ['hosting', 'running'],
@@ -353,7 +375,12 @@ async function destroy() {
 		</div>
 
 		<ul v-else class="server-list">
-			<li v-for="server in sortedServers" :key="server.id" class="server-card">
+			<li
+				v-for="server in sortedServers"
+				:key="server.id"
+				:ref="(el) => setServerCardRef(server.id, el)"
+				class="server-card"
+			>
 				<div class="server-row">
 					<div class="server-info">
 						<div class="server-title">

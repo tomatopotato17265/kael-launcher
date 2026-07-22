@@ -44,29 +44,32 @@
   "app.action-bar.downloads": {
     "message": "Downloads"
   },
-  "app.action-bar.hide-more-running-instances": {
-    "message": "Hide more running instances"
+  "app.action-bar.hide-more-running-items": {
+    "message": "Hide more running instances and servers"
   },
-  "app.action-bar.make-primary-instance": {
-    "message": "Make primary instance"
+  "app.action-bar.make-primary-item": {
+    "message": "Make primary"
   },
   "app.action-bar.no-instances-running": {
-    "message": "No instances running"
+    "message": "Nothing running"
   },
   "app.action-bar.offline": {
     "message": "Offline"
   },
-  "app.action-bar.primary-instance": {
-    "message": "Primary instance"
+  "app.action-bar.primary-item": {
+    "message": "Primary"
   },
   "app.action-bar.reload-to-update": {
     "message": "Reload to update"
   },
-  "app.action-bar.show-more-running-instances": {
-    "message": "Show more running instances"
+  "app.action-bar.show-more-running-items": {
+    "message": "Show more running instances and servers"
   },
   "app.action-bar.stop-instance": {
     "message": "Stop instance"
+  },
+  "app.action-bar.stop-server": {
+    "message": "Stop server"
   },
   "app.action-bar.update": {
     "message": "Update"
@@ -74,11 +77,17 @@
   "app.action-bar.view-active-downloads": {
     "message": "View active downloads"
   },
+  "app.action-bar.view-console": {
+    "message": "View console"
+  },
   "app.action-bar.view-instance": {
     "message": "View instance"
   },
   "app.action-bar.view-logs": {
     "message": "View logs"
+  },
+  "app.action-bar.view-server": {
+    "message": "View server"
   },
   "app.appearance-settings.advanced-rendering.description": {
     "message": "Enables advanced rendering such as blur effects that may cause performance issues without hardware-accelerated rendering."

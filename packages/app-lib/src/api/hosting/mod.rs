@@ -3,8 +3,9 @@ pub mod freedomchat;
 pub mod paper;
 
 use crate::State;
+use crate::event::HostingPayloadType;
 use crate::event::LoadingBarType;
-use crate::event::emit::{emit_loading, init_loading};
+use crate::event::emit::{emit_hosting, emit_loading, init_loading};
 use crate::state::{HostedServer, ServerFlavor};
 use crate::util::fetch::{fetch_json, write};
 use crate::util::io::IOError;
@@ -728,6 +729,25 @@ pub async fn start_server(id: String) -> crate::Result<()> {
         let _ = HostedServer::set_pids(&id, None, None, &state.pool).await;
         return Err(e);
     }
+
+    emit_hosting(&id, HostingPayloadType::Started).await?;
+
+    // The only place `Stopped` is emitted, so it fires uniformly whether the
+    // server was stopped via `stop_server` or crashed on its own.
+    let watch_id = id.clone();
+    let watch_state = state.clone();
+    tokio::spawn(async move {
+        while watch_state.hosting_manager.is_running(&watch_id) {
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+        if let Err(e) =
+            emit_hosting(&watch_id, HostingPayloadType::Stopped).await
+        {
+            tracing::warn!(
+                "Failed to emit hosting stopped event for {watch_id}: {e}"
+            );
+        }
+    });
 
     Ok(())
 }

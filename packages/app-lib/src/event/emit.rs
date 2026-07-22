@@ -1,12 +1,12 @@
 use super::{FriendPayload, LoadingBarId};
 use crate::event::{
-    CommandPayload, EventError, LoadingBar, LoadingBarType, ProcessPayloadType,
-    ProfilePayloadType,
+    CommandPayload, EventError, HostingPayloadType, LoadingBar, LoadingBarType,
+    ProcessPayloadType, ProfilePayloadType,
 };
 #[cfg(feature = "tauri")]
 use crate::event::{
-    FontPayload, LoadingPayload, ProcessPayload, ProfilePayload, ThemePayload,
-    WarningPayload,
+    FontPayload, HostingPayload, LoadingPayload, ProcessPayload, ProfilePayload,
+    ThemePayload, WarningPayload,
 };
 use futures::prelude::*;
 use serde_json::Value;
@@ -315,6 +315,29 @@ pub async fn emit_profile(
                 "profile",
                 ProfilePayload {
                     profile_path_id: profile_path_id.to_string(),
+                    event,
+                },
+            )
+            .map_err(EventError::from)?;
+    }
+    Ok(())
+}
+
+// emit_hosting(id, event)
+#[allow(unused_variables)]
+pub async fn emit_hosting(
+    id: &str,
+    event: HostingPayloadType,
+) -> crate::Result<()> {
+    #[cfg(feature = "tauri")]
+    {
+        let event_state = crate::EventState::get()?;
+        event_state
+            .app
+            .emit(
+                "hosting",
+                HostingPayload {
+                    id: id.to_string(),
                     event,
                 },
             )

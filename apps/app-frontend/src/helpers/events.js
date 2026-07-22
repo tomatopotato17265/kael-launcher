@@ -71,6 +71,17 @@ export async function profile_listener(callback) {
 	return await listen('profile', (event) => callback(event.payload))
 }
 
+/// Payload for the 'hosting' event
+/*
+    HostingPayload {
+        id: unique identification of the hosted server
+        event: event type ("started", "stopped")
+    }
+*/
+export async function hosting_listener(callback) {
+	return await listen('hosting', (event) => callback(event.payload))
+}
+
 /// Payload for the 'command' event
 /*
   CommandPayload {

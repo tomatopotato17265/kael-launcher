@@ -255,6 +255,20 @@ pub enum ProcessPayloadType {
 
 #[derive(Serialize, Clone)]
 #[cfg(feature = "tauri")]
+pub struct HostingPayload {
+    pub id: String,
+    pub event: HostingPayloadType,
+}
+
+#[derive(Serialize, Clone, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum HostingPayloadType {
+    Started,
+    Stopped,
+}
+
+#[derive(Serialize, Clone)]
+#[cfg(feature = "tauri")]
 pub struct ProfilePayload {
     pub profile_path_id: String,
     #[serde(flatten)]

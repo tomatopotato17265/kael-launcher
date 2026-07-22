@@ -42,18 +42,26 @@
 		<div
 			class="flex border-solid border-surface-5 text-sm items-center gap-2 py-1.5 px-3 rounded-xl border"
 		>
-			<template v-if="selectedProcess">
+			<template v-if="selectedItem">
 				<OnlineIndicatorIcon />
 				<div class="text-contrast flex items-center gap-2">
 					<router-link
-						v-tooltip="formatMessage(messages.viewInstance)"
-						:to="`/instance/${encodeURIComponent(selectedProcess.profile.path)}`"
+						v-tooltip="
+							formatMessage(
+								selectedItem.kind === 'instance' ? messages.viewInstance : messages.viewServer,
+							)
+						"
+						:to="
+							selectedItem.kind === 'instance'
+								? `/instance/${encodeURIComponent(selectedItem.process.profile.path)}`
+								: `/hosting/manage/?server=${encodeURIComponent(selectedItem.item.id)}`
+						"
 						class="hover:underline"
 					>
-						{{ selectedProcess.profile.name }}
+						{{ selectedItem.label }}
 					</router-link>
 					<Dropdown
-						v-if="currentProcesses.length > 1"
+						v-if="allRunning.length > 1"
 						placement="bottom"
 						:triggers="['click']"
 						:hide-triggers="['click']"
@@ -64,8 +72,8 @@
 							<button
 								v-tooltip="
 									showProfiles
-										? formatMessage(messages.hideMoreRunningInstances)
-										: formatMessage(messages.showMoreRunningInstances)
+										? formatMessage(messages.hideMoreRunningItems)
+										: formatMessage(messages.showMoreRunningItems)
 								"
 							>
 								<DropdownIcon :class="{ 'rotate-180': !!showProfiles }" />
@@ -74,40 +82,48 @@
 						<template #popper>
 							<div class="flex w-[20rem] max-h-[24rem] flex-col gap-2 overflow-auto">
 								<div
-									v-for="process in currentProcesses"
-									:key="process.uuid"
+									v-for="item in allRunning"
+									:key="item.key"
 									class="flex w-full items-center gap-2 rounded-xl bg-surface-4 p-2 text-sm"
 								>
 									<button
 										v-tooltip.left="
-											process.uuid === selectedProcess.uuid
-												? formatMessage(messages.primaryInstance)
-												: formatMessage(messages.makePrimaryInstance)
+											item.key === selectedItem.key
+												? formatMessage(messages.primaryItem)
+												: formatMessage(messages.makePrimaryItem)
 										"
 										class="flex flex-grow items-center gap-2"
 										:class="{
-											'active:scale-95 transition-transform': process.uuid !== selectedProcess.uuid,
+											'active:scale-95 transition-transform': item.key !== selectedItem.key,
 										}"
-										:disabled="process.uuid === selectedProcess.uuid"
-										@click="selectProcess(process)"
+										:disabled="item.key === selectedItem.key"
+										@click="selectItem(item)"
 									>
 										<OnlineIndicatorIcon />
 										<span class="mr-auto text-contrast flex items-center gap-2">
-											{{ process.profile.name }}
-											<StarIcon v-if="process.uuid === selectedProcess.uuid" class="text-orange" />
+											{{ item.label }}
+											<StarIcon v-if="item.key === selectedItem.key" class="text-orange" />
 										</span>
 									</button>
 									<button
-										v-tooltip="formatMessage(messages.stopInstance)"
+										v-tooltip="
+											formatMessage(
+												item.kind === 'instance' ? messages.stopInstance : messages.stopServer,
+											)
+										"
 										class="active:scale-95 flex"
-										@click.stop="stop(process)"
+										@click.stop="stop(item)"
 									>
 										<StopCircleIcon class="text-red size-5" />
 									</button>
 									<button
-										v-tooltip="formatMessage(messages.viewLogs)"
+										v-tooltip="
+											formatMessage(
+												item.kind === 'instance' ? messages.viewLogs : messages.viewConsole,
+											)
+										"
 										class="active:scale-95 flex"
-										@click.stop="goToTerminal(process.profile.path)"
+										@click.stop="goToTerminal(item)"
 									>
 										<TerminalSquareIcon class="text-secondary size-5" />
 									</button>
@@ -117,14 +133,22 @@
 					</Dropdown>
 				</div>
 				<button
-					v-tooltip="formatMessage(messages.stopInstance)"
+					v-tooltip="
+						formatMessage(
+							selectedItem.kind === 'instance' ? messages.stopInstance : messages.stopServer,
+						)
+					"
 					class="active:scale-95 flex"
-					@click="stop(selectedProcess)"
+					@click="stop(selectedItem)"
 				>
 					<StopCircleIcon class="text-red size-5" />
 				</button>
 				<button
-					v-tooltip="formatMessage(messages.viewLogs)"
+					v-tooltip="
+						formatMessage(
+							selectedItem.kind === 'instance' ? messages.viewLogs : messages.viewConsole,
+						)
+					"
 					class="active:scale-95 flex"
 					@click="goToTerminal()"
 				>
@@ -165,7 +189,13 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 import { trackEvent } from '@/helpers/analytics'
-import { loading_listener, process_listener } from '@/helpers/events'
+import { hosting_listener, loading_listener, process_listener } from '@/helpers/events'
+import {
+	type HostedServer,
+	listServers,
+	runningServers,
+	stopServer,
+} from '@/helpers/hosting'
 import { get_all as getRunningProcesses, kill as killProcess } from '@/helpers/process'
 import { get_many as getInstances } from '@/helpers/profile.js'
 import type { LoadingBar } from '@/helpers/state'
@@ -191,6 +221,15 @@ interface RunningProcess {
 	profile: GameInstance
 }
 
+interface RunningServerItem {
+	id: string
+	server: HostedServer
+}
+
+type RunningItem =
+	| { kind: 'instance'; key: string; label: string; process: RunningProcess }
+	| { kind: 'server'; key: string; label: string; item: RunningServerItem }
+
 const messages = defineMessages({
 	offline: {
 		id: 'app.action-bar.offline',
@@ -200,33 +239,45 @@ const messages = defineMessages({
 		id: 'app.action-bar.view-instance',
 		defaultMessage: 'View instance',
 	},
-	showMoreRunningInstances: {
-		id: 'app.action-bar.show-more-running-instances',
-		defaultMessage: 'Show more running instances',
+	viewServer: {
+		id: 'app.action-bar.view-server',
+		defaultMessage: 'View server',
 	},
-	hideMoreRunningInstances: {
-		id: 'app.action-bar.hide-more-running-instances',
-		defaultMessage: 'Hide more running instances',
+	showMoreRunningItems: {
+		id: 'app.action-bar.show-more-running-items',
+		defaultMessage: 'Show more running instances and servers',
 	},
-	primaryInstance: {
-		id: 'app.action-bar.primary-instance',
-		defaultMessage: 'Primary instance',
+	hideMoreRunningItems: {
+		id: 'app.action-bar.hide-more-running-items',
+		defaultMessage: 'Hide more running instances and servers',
 	},
-	makePrimaryInstance: {
-		id: 'app.action-bar.make-primary-instance',
-		defaultMessage: 'Make primary instance',
+	primaryItem: {
+		id: 'app.action-bar.primary-item',
+		defaultMessage: 'Primary',
+	},
+	makePrimaryItem: {
+		id: 'app.action-bar.make-primary-item',
+		defaultMessage: 'Make primary',
 	},
 	stopInstance: {
 		id: 'app.action-bar.stop-instance',
 		defaultMessage: 'Stop instance',
 	},
+	stopServer: {
+		id: 'app.action-bar.stop-server',
+		defaultMessage: 'Stop server',
+	},
 	viewLogs: {
 		id: 'app.action-bar.view-logs',
 		defaultMessage: 'View logs',
 	},
+	viewConsole: {
+		id: 'app.action-bar.view-console',
+		defaultMessage: 'View console',
+	},
 	noInstancesRunning: {
 		id: 'app.action-bar.no-instances-running',
-		defaultMessage: 'No instances running',
+		defaultMessage: 'Nothing running',
 	},
 	downloadingJava: {
 		id: 'app.action-bar.downloading-java',
@@ -331,7 +382,36 @@ async function handleUpdateClick() {
 }
 
 const currentProcesses = ref<RunningProcess[]>([])
-const selectedProcess = ref<RunningProcess | undefined>()
+const currentServers = ref<RunningServerItem[]>([])
+const selectedItem = ref<RunningItem | undefined>()
+
+const allRunning = computed<RunningItem[]>(() => [
+	...currentProcesses.value.map(
+		(process): RunningItem => ({
+			kind: 'instance',
+			key: process.uuid,
+			label: process.profile.name,
+			process,
+		}),
+	),
+	...currentServers.value.map(
+		(item): RunningItem => ({
+			kind: 'server',
+			key: item.id,
+			label: item.server.name,
+			item,
+		}),
+	),
+])
+
+function reselect() {
+	if (
+		!selectedItem.value ||
+		!allRunning.value.some((item) => item.key === selectedItem.value?.key)
+	) {
+		selectedItem.value = allRunning.value[0]
+	}
+}
 
 const refresh = async () => {
 	const processes = ((await getRunningProcesses().catch((error) => {
@@ -356,12 +436,36 @@ const refresh = async () => {
 			}
 		})
 		.filter((process): process is RunningProcess => process !== null)
-	if (!selectedProcess.value || !currentProcesses.value.includes(selectedProcess.value)) {
-		selectedProcess.value = currentProcesses.value[0]
+	reselect()
+}
+
+const refreshServers = async () => {
+	const runningIds = await runningServers().catch((error) => {
+		handleError(error)
+		return []
+	})
+	if (runningIds.length === 0) {
+		currentServers.value = []
+		reselect()
+		return
 	}
+
+	const servers = await listServers().catch((error) => {
+		handleError(error)
+		return []
+	})
+
+	currentServers.value = runningIds
+		.map((id) => {
+			const server = servers.find((item) => item.id === id)
+			return server ? { id, server } : null
+		})
+		.filter((item): item is RunningServerItem => item !== null)
+	reselect()
 }
 
 await refresh()
+await refreshServers()
 
 const offline = ref(!navigator.onLine)
 function handleOffline() {
@@ -380,27 +484,43 @@ const unlistenProcess = await process_listener(async () => {
 	await refresh()
 })
 
-const stop = async (process: RunningProcess) => {
-	try {
-		await killProcess(process.uuid).catch(handleError)
+const unlistenHosting = await hosting_listener(async () => {
+	await refreshServers()
+})
 
-		trackEvent('InstanceStop', {
-			loader: process.profile.loader,
-			game_version: process.profile.game_version,
-			source: 'AppBar',
-		})
+const stop = async (item: RunningItem) => {
+	try {
+		if (item.kind === 'instance') {
+			await killProcess(item.process.uuid).catch(handleError)
+
+			trackEvent('InstanceStop', {
+				loader: item.process.profile.loader,
+				game_version: item.process.profile.game_version,
+				source: 'AppBar',
+			})
+		} else {
+			await stopServer(item.item.id).catch(handleError)
+		}
 	} catch (e) {
 		console.error(e)
 	}
-	await refresh()
+	if (item.kind === 'instance') {
+		await refresh()
+	} else {
+		await refreshServers()
+	}
 }
 
-function goToTerminal(path?: string) {
-	const selectedPath = path ?? selectedProcess.value?.profile.path
-	if (!selectedPath) {
+function goToTerminal(item?: RunningItem) {
+	const target = item ?? selectedItem.value
+	if (!target) {
 		return
 	}
-	router.push(`/instance/${encodeURIComponent(selectedPath)}/logs`)
+	if (target.kind === 'instance') {
+		router.push(`/instance/${encodeURIComponent(target.process.profile.path)}/logs`)
+	} else {
+		router.push(`/hosting/manage/?server=${encodeURIComponent(target.item.id)}`)
+	}
 }
 
 const currentLoadingBars = ref<LoadingBar[]>([])
@@ -577,8 +697,8 @@ function openDownloadToast() {
 	updateNotification(true)
 }
 
-function selectProcess(process: RunningProcess) {
-	selectedProcess.value = process
+function selectItem(item: RunningItem) {
+	selectedItem.value = item
 }
 
 onBeforeUnmount(() => {
@@ -587,6 +707,7 @@ onBeforeUnmount(() => {
 	window.removeEventListener('offline', handleOffline)
 	window.removeEventListener('online', handleOnline)
 	unlistenProcess()
+	unlistenHosting()
 	unlistenLoading()
 	if (readyPillAnimationFrame !== null) {
 		cancelAnimationFrame(readyPillAnimationFrame)
