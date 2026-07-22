@@ -16,6 +16,7 @@ const { formatMessage } = useVIntl()
 const worldsInHomeFlag: FeatureFlag = 'worlds_in_home'
 const skipUnknownPackWarningFlag: FeatureFlag = 'skip_unknown_pack_warning'
 const showPlayTimeFlag: FeatureFlag = 'show_instance_play_time'
+const separateActionBarItemsFlag: FeatureFlag = 'separate_action_bar_items'
 
 const messages = defineMessages({
 	editThemeTitle: {
@@ -107,6 +108,15 @@ const messages = defineMessages({
 	showPlayTimeDescription: {
 		id: 'app.appearance-settings.show-play-time.description',
 		defaultMessage: `Displays how much time you've spent playing an instance.`,
+	},
+	separateActionBarItemsTitle: {
+		id: 'app.appearance-settings.separate-action-bar-items.title',
+		defaultMessage: 'Show instances separately in Action Bar',
+	},
+	separateActionBarItemsDescription: {
+		id: 'app.appearance-settings.separate-action-bar-items.description',
+		defaultMessage:
+			'Shows each running instance or server in its own box in the Action Bar instead of grouping them together.',
 	},
 	replayOnboardingTitle: {
 		id: 'app.appearance-settings.replay-onboarding.title',
@@ -211,6 +221,25 @@ function replayOnboarding() {
 					const newValue = !themeStore.getFeatureFlag(showPlayTimeFlag)
 					themeStore.featureFlags[showPlayTimeFlag] = newValue
 					settings.feature_flags[showPlayTimeFlag] = newValue
+				}
+			"
+		/>
+	</div>
+
+	<div class="mt-6 flex items-center justify-between">
+		<div>
+			<h2 class="m-0 text-lg font-semibold text-contrast">
+				{{ formatMessage(messages.separateActionBarItemsTitle) }}
+			</h2>
+			<p class="m-0 mt-1">{{ formatMessage(messages.separateActionBarItemsDescription) }}</p>
+		</div>
+		<Toggle
+			:model-value="themeStore.getFeatureFlag(separateActionBarItemsFlag)"
+			@update:model-value="
+				() => {
+					const newValue = !themeStore.getFeatureFlag(separateActionBarItemsFlag)
+					themeStore.featureFlags[separateActionBarItemsFlag] = newValue
+					settings.feature_flags[separateActionBarItemsFlag] = newValue
 				}
 			"
 		/>

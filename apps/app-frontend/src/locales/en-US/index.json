@@ -242,6 +242,12 @@
   "app.appearance-settings.select-option": {
     "message": "Select an option"
   },
+  "app.appearance-settings.separate-action-bar-items.description": {
+    "message": "Shows each running instance or server in its own box in the Action Bar instead of grouping them together."
+  },
+  "app.appearance-settings.separate-action-bar-items.title": {
+    "message": "Show instances separately in Action Bar"
+  },
   "app.appearance-settings.show-play-time.description": {
     "message": "Displays how much time you've spent playing an instance."
   },

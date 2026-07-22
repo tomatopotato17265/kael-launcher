@@ -39,9 +39,7 @@
 				<span v-else>{{ updateLabel }}</span>
 			</button>
 		</ButtonStyled>
-		<div
-			class="flex border-solid border-surface-5 text-sm items-center gap-2 py-1.5 px-3 rounded-xl border"
-		>
+		<div v-if="!separateActionBarItems" :class="pillClass">
 			<template v-if="selectedItem">
 				<OnlineIndicatorIcon />
 				<div class="text-contrast flex items-center gap-2">
@@ -160,6 +158,46 @@
 				<span class="text-secondary"> {{ formatMessage(messages.noInstancesRunning) }} </span>
 			</template>
 		</div>
+		<div v-else class="flex gap-2 items-center ml-auto">
+			<div v-if="allRunning.length === 0" :class="pillClass">
+				<span class="size-2 rounded-full bg-secondary" />
+				<span class="text-secondary"> {{ formatMessage(messages.noInstancesRunning) }} </span>
+			</div>
+			<div v-for="item in allRunning" :key="item.key" :class="pillClass">
+				<OnlineIndicatorIcon />
+				<router-link
+					v-tooltip="
+						formatMessage(item.kind === 'instance' ? messages.viewInstance : messages.viewServer)
+					"
+					:to="
+						item.kind === 'instance'
+							? `/instance/${encodeURIComponent(item.process.profile.path)}`
+							: `/hosting/manage/?server=${encodeURIComponent(item.item.id)}`
+					"
+					class="text-contrast hover:underline"
+				>
+					{{ item.label }}
+				</router-link>
+				<button
+					v-tooltip="
+						formatMessage(item.kind === 'instance' ? messages.stopInstance : messages.stopServer)
+					"
+					class="active:scale-95 flex"
+					@click="stop(item)"
+				>
+					<StopCircleIcon class="text-red size-5" />
+				</button>
+				<button
+					v-tooltip="
+						formatMessage(item.kind === 'instance' ? messages.viewLogs : messages.viewConsole)
+					"
+					class="active:scale-95 flex"
+					@click="goToTerminal(item)"
+				>
+					<TerminalSquareIcon class="text-secondary size-5" />
+				</button>
+			</div>
+		</div>
 	</div>
 </template>
 
@@ -206,14 +244,23 @@ import {
 	downloadAvailableAppUpdate,
 	installAvailableAppUpdate,
 } from '@/providers/app-update'
+import { useTheming } from '@/store/state'
 
 const { handleError } = injectNotificationManager()
 const popupNotificationManager = injectPopupNotificationManager()
 const { formatMessage } = useVIntl()
+const themeStore = useTheming()
 
 const router = useRouter()
 
 const showProfiles = ref(false)
+
+const pillClass =
+	'flex border-solid border-surface-5 text-sm items-center gap-2 py-1.5 px-3 rounded-xl border'
+
+const separateActionBarItems = computed(() =>
+	themeStore.getFeatureFlag('separate_action_bar_items'),
+)
 
 interface RunningProcess {
 	uuid: string

@@ -33,6 +33,7 @@ export const DEFAULT_FEATURE_FLAGS = {
 	skip_unknown_pack_warning: false,
 	i18n_debug: false,
 	show_instance_play_time: true,
+	separate_action_bar_items: false,
 }
 
 export type FeatureFlag = keyof typeof DEFAULT_FEATURE_FLAGS
