@@ -38,13 +38,13 @@ const nowInterval = setInterval(() => {
 const greeting = computed(() => {
 	const h = now.value.getHours()
 	const m = now.value.getMinutes()
-	if (h === 3 && m === 14) return 'Go to sleep bleh.'
+	if (h === 3 && m === 14) return 'Go to sleep bleh'
 	const name = currentUsername.value
 	let period: string
 	if (h >= 4 && h < 12) period = 'Good morning'
 	else if (h >= 12 && h < 17) period = 'Good afternoon'
 	else period = 'Good evening'
-	return name ? `${period}, ${name}.` : `${period}.`
+	return name ? `${period}, ${name}` : period
 })
 
 const recentInstances = computed(() =>
@@ -80,7 +80,7 @@ onUnmounted(() => {
 
 <template>
 	<div class="p-6 flex flex-col gap-2">
-		<h1 class="m-0 text-2xl font-extrabold">{{ greeting }}</h1>
+		<h1>{{ greeting }}</h1>
 		<div class="flex items-center">
 			<ButtonStyled color="brand">
 				<button :disabled="offline" @click="showCreationModal?.()">
