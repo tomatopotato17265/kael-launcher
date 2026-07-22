@@ -54,7 +54,6 @@ import { $fetch } from 'ofetch'
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
-import OnboardingFlow from '@/components/onboarding/OnboardingFlow.vue'
 import AppActionBar from '@/components/ui/AppActionBar.vue'
 import Breadcrumbs from '@/components/ui/Breadcrumbs.vue'
 import ErrorModal from '@/components/ui/ErrorModal.vue'
@@ -118,7 +117,6 @@ import { setupProviders } from '@/providers/setup'
 import { setupAuthProvider } from '@/providers/setup/auth'
 import { setupLoadingStateProvider } from '@/providers/setup/loading-state'
 import { useError } from '@/store/error.js'
-import { useOnboarding } from '@/store/onboarding.ts'
 import { useTheming } from '@/store/state'
 
 import { saveBrowseScrollPosition } from './helpers/browse-scroll'
@@ -128,7 +126,6 @@ import { AppNotificationManager } from './providers/app-notifications'
 import { AppPopupNotificationManager } from './providers/app-popup-notifications'
 
 const themeStore = useTheming()
-const onboardingStore = useOnboarding()
 const router = useRouter()
 const route = useRoute()
 
@@ -309,7 +306,6 @@ async function setupApp() {
 		collapsed_navigation,
 		hide_nametag_skins_page,
 		advanced_rendering,
-		onboarded,
 		default_page,
 		developer_mode,
 		feature_flags,
@@ -339,9 +335,6 @@ async function setupApp() {
 	const dev = await isDev()
 	isDevEnvironment.value = dev
 	const version = await getVersion()
-	if (!onboarded) {
-		onboardingStore.start()
-	}
 
 	nativeDecorations.value = native_decorations
 	if (os.value !== 'MacOS') await getCurrentWindow().setDecorations(native_decorations)
@@ -383,7 +376,7 @@ async function setupApp() {
 	if (telemetry) {
 		initAnalytics()
 		if (dev) debugAnalytics()
-		trackEvent('Launched', { version, dev, onboarded })
+		trackEvent('Launched', { version, dev })
 	}
 
 	if (!dev) document.addEventListener('contextmenu', (event) => event.preventDefault())
@@ -1242,7 +1235,6 @@ provideAppUpdateDownloadProgress(appUpdateDownload)
 
 <template>
 	<SplashScreen v-if="!stateFailed" ref="splashScreen" data-tauri-drag-region />
-	<OnboardingFlow v-if="stateInitialized && onboardingStore.active" />
 	<div id="teleports"></div>
 	<div
 		v-if="stateInitialized"

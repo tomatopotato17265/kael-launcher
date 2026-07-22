@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "\n            SELECT\n                max_concurrent_writes, max_concurrent_downloads,\n                locale, default_page, collapsed_navigation, hide_nametag_skins_page, advanced_rendering, native_decorations,\n                discord_rpc, developer_mode, telemetry, personalized_ads,\n                onboarded, json(onboarding_answers) as \"onboarding_answers?: serde_json::Value\",\n                json(extra_launch_args) extra_launch_args, json(custom_env_vars) custom_env_vars,\n                mc_memory_max, mc_force_fullscreen, mc_game_resolution_x, mc_game_resolution_y, hide_on_process_start,\n                hook_pre_launch, hook_wrapper, hook_post_exit,\n                custom_dir, prev_custom_dir, migrated, json(feature_flags) feature_flags, toggle_sidebar,\n                skipped_update, pending_update_toast_for_version, auto_download_updates,\n                brand_color, color_theme, dark_color_theme, dark_brand_color,\n                sync_theme_with_system, active_theme_preset, dark_active_theme_preset, theme_dir,\n                active_font, font_dir,\n                version\n            FROM settings\n            ",
+  "query": "\n            SELECT\n                max_concurrent_writes, max_concurrent_downloads,\n                locale, default_page, collapsed_navigation, hide_nametag_skins_page, advanced_rendering, native_decorations,\n                discord_rpc, developer_mode, telemetry, personalized_ads,\n                json(extra_launch_args) extra_launch_args, json(custom_env_vars) custom_env_vars,\n                mc_memory_max, mc_force_fullscreen, mc_game_resolution_x, mc_game_resolution_y, hide_on_process_start,\n                hook_pre_launch, hook_wrapper, hook_post_exit,\n                custom_dir, prev_custom_dir, migrated, json(feature_flags) feature_flags, toggle_sidebar,\n                skipped_update, pending_update_toast_for_version, auto_download_updates,\n                brand_color, color_theme, dark_color_theme, dark_brand_color,\n                sync_theme_with_system, active_theme_preset, dark_active_theme_preset, theme_dir,\n                active_font, font_dir,\n                version\n            FROM settings\n            ",
   "describe": {
     "columns": [
       {
@@ -64,158 +64,148 @@
         "type_info": "Integer"
       },
       {
-        "name": "onboarded",
-        "ordinal": 12,
-        "type_info": "Integer"
-      },
-      {
-        "name": "onboarding_answers?: serde_json::Value",
-        "ordinal": 13,
-        "type_info": "Null"
-      },
-      {
         "name": "extra_launch_args",
-        "ordinal": 14,
+        "ordinal": 12,
         "type_info": "Text"
       },
       {
         "name": "custom_env_vars",
-        "ordinal": 15,
+        "ordinal": 13,
         "type_info": "Text"
       },
       {
         "name": "mc_memory_max",
-        "ordinal": 16,
+        "ordinal": 14,
         "type_info": "Integer"
       },
       {
         "name": "mc_force_fullscreen",
-        "ordinal": 17,
+        "ordinal": 15,
         "type_info": "Integer"
       },
       {
         "name": "mc_game_resolution_x",
-        "ordinal": 18,
+        "ordinal": 16,
         "type_info": "Integer"
       },
       {
         "name": "mc_game_resolution_y",
-        "ordinal": 19,
+        "ordinal": 17,
         "type_info": "Integer"
       },
       {
         "name": "hide_on_process_start",
-        "ordinal": 20,
+        "ordinal": 18,
         "type_info": "Integer"
       },
       {
         "name": "hook_pre_launch",
-        "ordinal": 21,
+        "ordinal": 19,
         "type_info": "Text"
       },
       {
         "name": "hook_wrapper",
-        "ordinal": 22,
+        "ordinal": 20,
         "type_info": "Text"
       },
       {
         "name": "hook_post_exit",
-        "ordinal": 23,
+        "ordinal": 21,
         "type_info": "Text"
       },
       {
         "name": "custom_dir",
-        "ordinal": 24,
+        "ordinal": 22,
         "type_info": "Text"
       },
       {
         "name": "prev_custom_dir",
-        "ordinal": 25,
+        "ordinal": 23,
         "type_info": "Text"
       },
       {
         "name": "migrated",
-        "ordinal": 26,
+        "ordinal": 24,
         "type_info": "Integer"
       },
       {
         "name": "feature_flags",
-        "ordinal": 27,
+        "ordinal": 25,
         "type_info": "Text"
       },
       {
         "name": "toggle_sidebar",
-        "ordinal": 28,
+        "ordinal": 26,
         "type_info": "Integer"
       },
       {
         "name": "skipped_update",
-        "ordinal": 29,
+        "ordinal": 27,
         "type_info": "Text"
       },
       {
         "name": "pending_update_toast_for_version",
-        "ordinal": 30,
+        "ordinal": 28,
         "type_info": "Text"
       },
       {
         "name": "auto_download_updates",
-        "ordinal": 31,
+        "ordinal": 29,
         "type_info": "Integer"
       },
       {
         "name": "brand_color",
-        "ordinal": 32,
+        "ordinal": 30,
         "type_info": "Text"
       },
       {
         "name": "color_theme",
-        "ordinal": 33,
+        "ordinal": 31,
         "type_info": "Text"
       },
       {
         "name": "dark_color_theme",
-        "ordinal": 34,
+        "ordinal": 32,
         "type_info": "Text"
       },
       {
         "name": "dark_brand_color",
-        "ordinal": 35,
+        "ordinal": 33,
         "type_info": "Text"
       },
       {
         "name": "sync_theme_with_system",
-        "ordinal": 36,
+        "ordinal": 34,
         "type_info": "Integer"
       },
       {
         "name": "active_theme_preset",
-        "ordinal": 37,
+        "ordinal": 35,
         "type_info": "Text"
       },
       {
         "name": "dark_active_theme_preset",
-        "ordinal": 38,
+        "ordinal": 36,
         "type_info": "Text"
       },
       {
         "name": "theme_dir",
-        "ordinal": 39,
+        "ordinal": 37,
         "type_info": "Text"
       },
       {
         "name": "active_font",
-        "ordinal": 40,
+        "ordinal": 38,
         "type_info": "Text"
       },
       {
         "name": "font_dir",
-        "ordinal": 41,
+        "ordinal": 39,
         "type_info": "Text"
       },
       {
         "name": "version",
-        "ordinal": 42,
+        "ordinal": 40,
         "type_info": "Integer"
       }
     ],
@@ -235,8 +225,6 @@
       false,
       false,
       false,
-      false,
-      null,
       null,
       null,
       false,
@@ -268,5 +256,5 @@
       false
     ]
   },
-  "hash": "e1d035b08417c6c3546e29423ff47fea4b8561cafd6ce37214f33089916f629c"
+  "hash": "d7e145892a1a48fcd87538790f991db5af5e61019552a5835d9327e77b44b674"
 }

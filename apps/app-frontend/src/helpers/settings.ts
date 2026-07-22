@@ -5,7 +5,6 @@
  */
 import { invoke } from '@tauri-apps/api/core'
 
-import type { OnboardingAnswers } from '@/components/onboarding/types.ts'
 import type { Hooks, MemorySettings, WindowSize } from '@/helpers/types'
 import type { FeatureFlag } from '@/store/theme.ts'
 
@@ -46,9 +45,6 @@ export type AppSettings = {
 	telemetry: boolean
 	discord_rpc: boolean
 	personalized_ads: boolean
-
-	onboarded: boolean
-	onboarding_answers: OnboardingAnswers | null
 
 	extra_launch_args: string[]
 	custom_env_vars: [string, string][]

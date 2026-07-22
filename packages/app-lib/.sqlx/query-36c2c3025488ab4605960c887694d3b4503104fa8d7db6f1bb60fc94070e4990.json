@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\n            UPDATE settings\n            SET\n                max_concurrent_writes = $1,\n                max_concurrent_downloads = $2,\n\n                locale = $3,\n                default_page = $4,\n                collapsed_navigation = $5,\n                advanced_rendering = $6,\n                native_decorations = $7,\n\n                discord_rpc = $8,\n                developer_mode = $9,\n                telemetry = $10,\n                personalized_ads = $11,\n\n                extra_launch_args = jsonb($12),\n                custom_env_vars = jsonb($13),\n                mc_memory_max = $14,\n                mc_force_fullscreen = $15,\n                mc_game_resolution_x = $16,\n                mc_game_resolution_y = $17,\n                hide_on_process_start = $18,\n\n                hook_pre_launch = $19,\n                hook_wrapper = $20,\n                hook_post_exit = $21,\n\n                custom_dir = $22,\n                prev_custom_dir = $23,\n                migrated = $24,\n\n                toggle_sidebar = $25,\n                feature_flags = $26,\n                hide_nametag_skins_page = $27,\n\n                skipped_update = $28,\n                pending_update_toast_for_version = $29,\n                auto_download_updates = $30,\n\n                brand_color = $31,\n                color_theme = $32,\n                dark_color_theme = $33,\n                dark_brand_color = $34,\n                sync_theme_with_system = $35,\n                active_theme_preset = $36,\n                dark_active_theme_preset = $37,\n                theme_dir = $38,\n                active_font = $39,\n                font_dir = $40,\n\n                version = $41\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 41
+    },
+    "nullable": []
+  },
+  "hash": "36c2c3025488ab4605960c887694d3b4503104fa8d7db6f1bb60fc94070e4990"
+}

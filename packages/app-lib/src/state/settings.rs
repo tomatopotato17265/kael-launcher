@@ -44,11 +44,6 @@ pub struct Settings {
     pub discord_rpc: bool,
     pub personalized_ads: bool,
 
-    pub onboarded: bool,
-    /// Raw answers from the first-launch onboarding flow, stored as an opaque
-    /// JSON blob that only the frontend reads and writes.
-    pub onboarding_answers: Option<serde_json::Value>,
-
     pub extra_launch_args: Vec<String>,
     pub custom_env_vars: Vec<(String, String)>,
     pub memory: MemorySettings,
@@ -100,7 +95,6 @@ impl Settings {
                 max_concurrent_writes, max_concurrent_downloads,
                 locale, default_page, collapsed_navigation, hide_nametag_skins_page, advanced_rendering, native_decorations,
                 discord_rpc, developer_mode, telemetry, personalized_ads,
-                onboarded, json(onboarding_answers) as "onboarding_answers?: serde_json::Value",
                 json(extra_launch_args) extra_launch_args, json(custom_env_vars) custom_env_vars,
                 mc_memory_max, mc_force_fullscreen, mc_game_resolution_x, mc_game_resolution_y, hide_on_process_start,
                 hook_pre_launch, hook_wrapper, hook_post_exit,
@@ -130,8 +124,6 @@ impl Settings {
             discord_rpc: res.discord_rpc == 1,
             developer_mode: res.developer_mode == 1,
             personalized_ads: res.personalized_ads == 1,
-            onboarded: res.onboarded == 1,
-            onboarding_answers: res.onboarding_answers,
             extra_launch_args: res
                 .extra_launch_args
                 .as_ref()
@@ -194,11 +186,6 @@ impl Settings {
         let extra_launch_args = serde_json::to_string(&self.extra_launch_args)?;
         let custom_env_vars = serde_json::to_string(&self.custom_env_vars)?;
         let feature_flags = serde_json::to_string(&self.feature_flags)?;
-        let onboarding_answers = self
-            .onboarding_answers
-            .as_ref()
-            .map(serde_json::to_string)
-            .transpose()?;
         let version = self.version as i64;
 
         sqlx::query!(
@@ -219,46 +206,42 @@ impl Settings {
                 telemetry = $10,
                 personalized_ads = $11,
 
-                onboarded = $12,
+                extra_launch_args = jsonb($12),
+                custom_env_vars = jsonb($13),
+                mc_memory_max = $14,
+                mc_force_fullscreen = $15,
+                mc_game_resolution_x = $16,
+                mc_game_resolution_y = $17,
+                hide_on_process_start = $18,
 
-                extra_launch_args = jsonb($13),
-                custom_env_vars = jsonb($14),
-                mc_memory_max = $15,
-                mc_force_fullscreen = $16,
-                mc_game_resolution_x = $17,
-                mc_game_resolution_y = $18,
-                hide_on_process_start = $19,
+                hook_pre_launch = $19,
+                hook_wrapper = $20,
+                hook_post_exit = $21,
 
-                hook_pre_launch = $20,
-                hook_wrapper = $21,
-                hook_post_exit = $22,
+                custom_dir = $22,
+                prev_custom_dir = $23,
+                migrated = $24,
 
-                custom_dir = $23,
-                prev_custom_dir = $24,
-                migrated = $25,
+                toggle_sidebar = $25,
+                feature_flags = $26,
+                hide_nametag_skins_page = $27,
 
-                toggle_sidebar = $26,
-                feature_flags = $27,
-                hide_nametag_skins_page = $28,
+                skipped_update = $28,
+                pending_update_toast_for_version = $29,
+                auto_download_updates = $30,
 
-                skipped_update = $29,
-                pending_update_toast_for_version = $30,
-                auto_download_updates = $31,
+                brand_color = $31,
+                color_theme = $32,
+                dark_color_theme = $33,
+                dark_brand_color = $34,
+                sync_theme_with_system = $35,
+                active_theme_preset = $36,
+                dark_active_theme_preset = $37,
+                theme_dir = $38,
+                active_font = $39,
+                font_dir = $40,
 
-                brand_color = $32,
-                color_theme = $33,
-                dark_color_theme = $34,
-                dark_brand_color = $35,
-                sync_theme_with_system = $36,
-                active_theme_preset = $37,
-                dark_active_theme_preset = $38,
-                theme_dir = $39,
-                active_font = $40,
-                font_dir = $41,
-
-                onboarding_answers = jsonb($42),
-
-                version = $43
+                version = $41
             ",
             max_concurrent_writes,
             max_concurrent_downloads,
@@ -271,7 +254,6 @@ impl Settings {
             self.developer_mode,
             self.telemetry,
             self.personalized_ads,
-            self.onboarded,
             extra_launch_args,
             custom_env_vars,
             self.memory.maximum,
@@ -301,7 +283,6 @@ impl Settings {
             self.theme_dir,
             self.active_font,
             self.font_dir,
-            onboarding_answers,
             version,
         )
         .execute(exec)
