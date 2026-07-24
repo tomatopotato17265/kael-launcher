@@ -144,6 +144,22 @@
 				</div>
 			</Collapsible>
 		</template>
+
+		<!-- Fabric API install offer -->
+		<div
+			v-if="ctx.flowType === 'instance' && selectedLoader === 'fabric'"
+			class="flex w-full flex-row items-center justify-between gap-4"
+		>
+			<div class="flex flex-col gap-1">
+				<span class="font-semibold text-contrast">{{
+					formatMessage(messages.installFabricApiLabel)
+				}}</span>
+				<span class="text-sm text-secondary">{{
+					formatMessage(messages.installFabricApiDescription)
+				}}</span>
+			</div>
+			<Toggle v-model="ctx.installFabricApi.value" small class="shrink-0" />
+		</div>
 	</div>
 </template>
 
@@ -163,6 +179,7 @@ import Collapsible from '../../../base/Collapsible.vue'
 import Combobox, { type ComboboxOption } from '../../../base/Combobox.vue'
 import PaperChannelBadge from '../../../base/PaperChannelBadge.vue'
 import StyledInput from '../../../base/StyledInput.vue'
+import Toggle from '../../../base/Toggle.vue'
 import type { LoaderVersionEntry, LoaderVersionType } from '../creation-flow-context'
 import { injectCreationFlowContext } from '../creation-flow-context'
 import { formatLoaderLabel } from '../shared'
@@ -240,6 +257,14 @@ const messages = defineMessages({
 	searchLoaderVersion: {
 		id: 'creation-flow.modal.custom-setup.loader-version.search-placeholder',
 		defaultMessage: 'Search loader version...',
+	},
+	installFabricApiLabel: {
+		id: 'creation-flow.modal.custom-setup.install-fabric-api.label',
+		defaultMessage: 'Install Fabric API',
+	},
+	installFabricApiDescription: {
+		id: 'creation-flow.modal.custom-setup.install-fabric-api.description',
+		defaultMessage: 'Automatically install the Fabric API mod, required by most Fabric mods.',
 	},
 	stableLoaderVersionType: {
 		id: 'creation-flow.modal.custom-setup.loader-version-type.stable',

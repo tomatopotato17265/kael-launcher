@@ -81,15 +81,16 @@ onUnmounted(() => {
 <template>
 	<div class="p-6 flex flex-col gap-2">
 		<h1>{{ greeting }}</h1>
-		<div class="flex items-center">
-			<ButtonStyled color="brand">
-				<button :disabled="offline" @click="showCreationModal?.()">
-					<PlusIcon />
-					Create Instance
-				</button>
-			</ButtonStyled>
-		</div>
 		<RecentWorldsList :recent-instances="recentInstances" />
-		<GridDisplay v-if="instances.length > 0" label="Instances" :instances="instances" />
+		<GridDisplay label="Instances" :instances="instances">
+			<template #actions>
+				<ButtonStyled color="brand">
+					<button style="height: 2.5rem" :disabled="offline" @click="showCreationModal?.()">
+						<PlusIcon />
+						Create Instance
+					</button>
+				</ButtonStyled>
+			</template>
+		</GridDisplay>
 	</div>
 </template>

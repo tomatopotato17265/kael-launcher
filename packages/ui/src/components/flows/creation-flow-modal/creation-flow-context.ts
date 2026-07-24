@@ -160,6 +160,7 @@ export interface CreationFlowContextValue {
 	hideLoaderChips: ComputedRef<boolean>
 	hideLoaderVersion: ComputedRef<boolean>
 	showSnapshots: Ref<boolean>
+	installFabricApi: Ref<boolean>
 	loaderVersionsCache: Ref<Record<string, { id: string; loaders: LoaderVersionEntry[] }[]>>
 	paperSupportedVersions: Ref<Set<string> | null>
 	purpurSupportedVersions: Ref<Set<string> | null>
@@ -295,6 +296,7 @@ export function createCreationFlowContext(
 	const loaderVersionType = ref<LoaderVersionType>('stable')
 	const selectedLoaderVersion = ref<string | null>(null)
 	const showSnapshots = ref(false)
+	const installFabricApi = ref(true)
 	const loaderVersionsCache = ref<Record<string, { id: string; loaders: LoaderVersionEntry[] }[]>>(
 		{},
 	)
@@ -452,6 +454,7 @@ export function createCreationFlowContext(
 		loaderVersionType.value = 'stable'
 		selectedLoaderVersion.value = null
 		showSnapshots.value = false
+		installFabricApi.value = true
 		modpackSelection.value = null
 		modpackFile.value = null
 		modpackFilePath.value = null
@@ -577,6 +580,7 @@ export function createCreationFlowContext(
 		hideLoaderChips,
 		hideLoaderVersion,
 		showSnapshots,
+		installFabricApi,
 		loaderVersionsCache,
 		paperSupportedVersions,
 		purpurSupportedVersions,

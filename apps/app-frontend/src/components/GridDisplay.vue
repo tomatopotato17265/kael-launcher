@@ -278,6 +278,7 @@ const filteredResults = computed(() => {
 			placeholder="Search"
 			clearable
 			wrapper-class="flex-1"
+			input-class="!h-10"
 		/>
 		<DropdownSelect
 			v-slot="{ selected }"
@@ -301,6 +302,7 @@ const filteredResults = computed(() => {
 			<span class="font-semibold text-primary">Group by: </span>
 			<span class="font-semibold text-secondary">{{ selected }}</span>
 		</DropdownSelect>
+		<slot name="actions" />
 	</div>
 	<Accordion
 		v-for="instanceSection in Array.from(filteredResults, ([key, value]) => ({

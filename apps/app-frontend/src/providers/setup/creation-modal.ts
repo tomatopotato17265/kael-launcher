@@ -12,12 +12,15 @@ import { useRouter } from 'vue-router'
 import type UnknownPackWarningModal from '@/components/ui/install_flow/UnknownPackWarningModal.vue'
 import type ModpackAlreadyInstalledModal from '@/components/ui/modal/ModpackAlreadyInstalledModal.vue'
 import { trackEvent } from '@/helpers/analytics'
-import { get_project_versions, get_search_results } from '@/helpers/cache.js'
+import { get_project, get_project_versions, get_search_results } from '@/helpers/cache.js'
 import { import_instance } from '@/helpers/import.js'
 import { get_loader_versions as getLoaderManifest } from '@/helpers/metadata.js'
 import { create_profile_and_install, create_profile_and_install_from_file } from '@/helpers/pack'
-import { create, list } from '@/helpers/profile.js'
+import { add_project_from_version, create, list } from '@/helpers/profile.js'
 import type { InstanceLoader } from '@/helpers/types'
+import { findPreferredVersion } from '@/store/install.js'
+
+const FABRIC_API_PROJECT_ID = 'fabric-api'
 
 export function setupCreationModal(
 	notificationManager: AbstractWebNotificationManager,
@@ -67,6 +70,26 @@ export function setupCreationModal(
 	) {
 		await create_profile_and_install(projectId, versionId, name, iconUrl).catch(handleError)
 		trackEvent('InstanceCreate', { source: 'CreationModalModpack' })
+	}
+
+	async function installFabricApi(profilePath: string, gameVersion: string) {
+		try {
+			const [project, versions] = await Promise.all([
+				get_project(FABRIC_API_PROJECT_ID),
+				get_project_versions(FABRIC_API_PROJECT_ID),
+			])
+			if (!project || !versions) return
+
+			const version = findPreferredVersion(versions, project, {
+				game_version: gameVersion,
+				loader: 'fabric',
+			})
+			if (!version) return
+
+			await add_project_from_version(profilePath, version.id, 'standalone')
+		} catch (err) {
+			handleError(err as Error)
+		}
 	}
 
 	async function handleCreate(config: CreationFlowContextValue) {
@@ -139,10 +162,11 @@ export function setupCreationModal(
 				: (config.selectedLoaderVersion.value ?? config.loaderVersionType.value)
 			const iconPath = config.instanceIconPath.value ?? null
 			const name = config.instanceName.value.trim() || config.autoInstanceName.value
+			const gameVersion = config.selectedGameVersion.value!
 
-			await create(
+			const profilePath = await create(
 				name,
-				config.selectedGameVersion.value!,
+				gameVersion,
 				loader as InstanceLoader,
 				loaderVersion,
 				iconPath,
@@ -152,6 +176,10 @@ export function setupCreationModal(
 			trackEvent('InstanceCreate', {
 				source: 'CreationModal',
 			})
+
+			if (profilePath && loader === 'fabric' && config.installFabricApi.value) {
+				await installFabricApi(profilePath, gameVersion)
+			}
 		} catch (err) {
 			handleError(err as Error)
 		}
