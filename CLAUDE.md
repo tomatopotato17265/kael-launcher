@@ -17,7 +17,6 @@ This is the Modrinth monorepo — it contains all Modrinth projects, both fronte
 | `app-frontend`    | Desktop/app frontend (Vue 3)   |
 | `app`             | Desktop/app shell (Tauri)      |
 | `app-playground`  | Testing playground for app     |
-| `daedalus_client` | Daedalus client implementation |
 | `docs`            | Documentation site (Astro)     |
 
 ### Packages (`packages/`)
@@ -34,12 +33,7 @@ This is the Modrinth monorepo — it contains all Modrinth projects, both fronte
 | `daedalus`         | Daedalus protocol                                     |
 | `tooling-config`   | ESLint, Prettier, TypeScript configs                  |
 | `ariadne`          | Analytics library                                     |
-| `modrinth-log`     | Logging utilities                                     |
-| `modrinth-maxmind` | MaxMind GeoIP                                         |
-| `modrinth-util`    | General utilities                                     |
-| `muralpay`         | Payment processing                                    |
 | `path-util`        | Path utilities                                        |
-| `sqlx-tracing`     | SQLx query tracing                                    |
 
 ## Pre-PR Commands
 

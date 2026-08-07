@@ -232,12 +232,6 @@ importers:
 
   apps/app-playground: {}
 
-  apps/daedalus_client:
-    dependencies:
-      '@kael/daedalus':
-        specifier: workspace:*
-        version: link:../../packages/daedalus
-
   packages/api-client:
     dependencies:
       mitt:
