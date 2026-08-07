@@ -304,31 +304,40 @@ const filteredResults = computed(() => {
 		</DropdownSelect>
 		<slot name="actions" />
 	</div>
-	<Accordion
-		v-for="instanceSection in Array.from(filteredResults, ([key, value]) => ({
-			key,
-			value,
-		}))"
-		:key="instanceSection.key"
-		:divider="instanceSection.key !== 'None'"
-		:open-by-default="!isSectionCollapsed(instanceSection.key)"
-		class="row"
-		@on-open="setSectionCollapsed(instanceSection.key, false)"
-		@on-close="setSectionCollapsed(instanceSection.key, true)"
+	<div
+		v-if="instances.length === 0"
+		class="flex flex-col items-center justify-center gap-1 py-16 text-center"
 	>
-		<template v-if="instanceSection.key !== 'None'" #title>
-			<span class="text-base">{{ instanceSection.key }}</span>
-		</template>
-		<section class="instances">
-			<Instance
-				v-for="instance in instanceSection.value"
-				ref="instanceComponents"
-				:key="instance.path + instance.install_stage"
-				:instance="instance"
-				@contextmenu.prevent.stop="(event) => handleRightClick(event, instance.path)"
-			/>
-		</section>
-	</Accordion>
+		<span class="text-lg font-semibold text-contrast">No instances yet</span>
+		<span class="text-sm font-normal text-secondary">Create an instance to get started.</span>
+	</div>
+	<template v-else>
+		<Accordion
+			v-for="instanceSection in Array.from(filteredResults, ([key, value]) => ({
+				key,
+				value,
+			}))"
+			:key="instanceSection.key"
+			:divider="instanceSection.key !== 'None'"
+			:open-by-default="!isSectionCollapsed(instanceSection.key)"
+			class="row"
+			@on-open="setSectionCollapsed(instanceSection.key, false)"
+			@on-close="setSectionCollapsed(instanceSection.key, true)"
+		>
+			<template v-if="instanceSection.key !== 'None'" #title>
+				<span class="text-base">{{ instanceSection.key }}</span>
+			</template>
+			<section class="instances">
+				<Instance
+					v-for="instance in instanceSection.value"
+					ref="instanceComponents"
+					:key="instance.path + instance.install_stage"
+					:instance="instance"
+					@contextmenu.prevent.stop="(event) => handleRightClick(event, instance.path)"
+				/>
+			</section>
+		</Accordion>
+	</template>
 	<ConfirmDeleteInstanceModal ref="confirmModal" @delete="deleteProfile" />
 	<ContextMenu ref="instanceOptions" @option-clicked="handleOptionsClick">
 		<template #play> <PlayIcon /> Play </template>

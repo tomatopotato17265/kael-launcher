@@ -16,7 +16,7 @@ use reqwest::Method;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -157,6 +157,39 @@ pub struct CreatePackDescription {
     pub version_id: Option<String>,
     pub existing_loading_bar: Option<LoadingBarId>,
     pub profile_path: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocalPackFormat {
+    Modrinth,
+    CurseForge,
+    Unknown,
+}
+
+/// Sniffs a local modpack zip's entries (central directory only, no decompression)
+/// to determine which manifest format it uses, without relying on file extension.
+pub async fn detect_local_pack_format(
+    path: &Path,
+) -> crate::Result<LocalPackFormat> {
+    let path = path.to_path_buf();
+    tokio::task::spawn_blocking(move || -> crate::Result<LocalPackFormat> {
+        let file = std::fs::File::open(&path)?;
+        let mut archive = zip::ZipArchive::new(file).map_err(|e| {
+            crate::ErrorKind::InputError(format!(
+                "Failed to read modpack archive: {e}"
+            ))
+            .as_error()
+        })?;
+
+        if archive.by_name("modrinth.index.json").is_ok() {
+            return Ok(LocalPackFormat::Modrinth);
+        }
+        if archive.by_name("manifest.json").is_ok() {
+            return Ok(LocalPackFormat::CurseForge);
+        }
+        Ok(LocalPackFormat::Unknown)
+    })
+    .await?
 }
 
 pub async fn get_profile_from_pack(

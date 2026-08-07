@@ -140,6 +140,60 @@ fn extract_overrides_blocking(
     Ok(())
 }
 
+/// Install a CurseForge modpack from a local `.zip` file (e.g. picked via the "install
+/// modpack from file" flow) into an already-created profile.
+///
+/// Individual mod files are still resolved and downloaded through the CurseForge API by
+/// file ID (`manifest.json` only stores IDs, not URLs) — only the manifest and the
+/// `overrides` folder are read directly from the local archive.
+///
+/// Returns the profile-relative path of the profile.
+pub async fn install_curseforge_pack_from_file(
+    path: PathBuf,
+    profile_path: String,
+) -> crate::Result<String> {
+    let state = State::get().await?;
+
+    let archive_bytes = bytes::Bytes::from(tokio::fs::read(&path).await?);
+
+    let manifest = {
+        let bytes = archive_bytes.clone();
+        tokio::task::spawn_blocking(move || read_manifest_blocking(bytes))
+            .await??
+    };
+
+    let game_version = manifest.minecraft.version.clone();
+    let (loader, loader_version_hint) = parse_loader(&manifest);
+    let loader_version = if loader != ModLoader::Vanilla {
+        crate::launcher::get_loader_version_from_profile(
+            &game_version,
+            loader,
+            loader_version_hint.as_deref(),
+        )
+        .await?
+        .map(|x| x.id)
+    } else {
+        None
+    };
+
+    let pack_name = manifest.name.clone();
+    crate::api::profile::edit(&profile_path, |prof| {
+        if let Some(ref name) = pack_name {
+            prof.name = name.clone();
+        }
+        prof.game_version.clone_from(&game_version);
+        prof.loader_version = loader_version.clone();
+        prof.loader = loader;
+        async { Ok(()) }
+    })
+    .await?;
+
+    install_modpack_contents(&state, &profile_path, &manifest, archive_bytes)
+        .await?;
+
+    Ok(profile_path)
+}
+
 /// Install a CurseForge modpack (by mod + file ID) as a brand new profile.
 ///
 /// Returns the profile-relative path of the created profile.

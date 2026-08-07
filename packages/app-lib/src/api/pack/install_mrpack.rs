@@ -219,11 +219,35 @@ where
 /// Install a pack
 /// Wrapper around install_pack_files that generates a pack creation description, and
 /// attempts to install the pack files. If it fails, it will remove the profile (fail safely)
-/// Install a modpack from a mrpack file (a modrinth .zip format)
+/// Install a modpack from a mrpack file (a modrinth .zip format), or, when a local `FromFile`
+/// location turns out to be a CurseForge-format zip (`manifest.json` instead of
+/// `modrinth.index.json`), dispatches to the CurseForge installer instead.
 pub async fn install_zipped_mrpack(
     location: CreatePackLocation,
     profile_path: String,
 ) -> crate::Result<String> {
+    if let CreatePackLocation::FromFile { path } = &location {
+        let format = super::install_from::detect_local_pack_format(path)
+            .await
+            .unwrap_or(super::install_from::LocalPackFormat::Unknown);
+
+        if format == super::install_from::LocalPackFormat::CurseForge {
+            let result = super::install_curseforge::install_curseforge_pack_from_file(
+                path.clone(),
+                profile_path.clone(),
+            )
+            .await;
+
+            return match result {
+                Ok(profile) => Ok(profile),
+                Err(err) => {
+                    let _ = crate::api::profile::remove(&profile_path).await;
+                    Err(err)
+                }
+            };
+        }
+    }
+
     // Get file from description
     let create_pack: CreatePack = match location {
         CreatePackLocation::FromVersionId {

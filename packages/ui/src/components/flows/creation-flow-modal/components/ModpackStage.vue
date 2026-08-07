@@ -214,6 +214,7 @@ async function triggerFileInput() {
 
 	const picked = await filePicker.pickModpackFile({
 		readFile: ctx.flowType !== 'instance',
+		allowCurseForge: ctx.flowType === 'instance',
 	})
 	if (picked) {
 		ctx.modpackFile.value = picked.file ?? null

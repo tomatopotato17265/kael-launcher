@@ -27,9 +27,10 @@ export function setupFilePickerProvider() {
 			return { file, path, previewUrl: convertFileSrc(path) }
 		},
 		async pickModpackFile(options) {
+			const extensions = options?.allowCurseForge ? ['mrpack', 'zip'] : ['mrpack']
 			const result = await open({
 				multiple: false,
-				filters: [{ name: 'Modpack', extensions: ['mrpack'] }],
+				filters: [{ name: 'Modpack', extensions }],
 			})
 			if (!result) return null
 			const path = result.path ?? result

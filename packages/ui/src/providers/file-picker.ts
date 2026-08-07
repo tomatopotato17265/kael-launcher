@@ -17,6 +17,8 @@ export interface PickedModpackFile extends Omit<PickedFile, 'file'> {
 export interface PickModpackFileOptions {
 	/** Set to false when a native path can be streamed directly by the backend. */
 	readFile?: boolean
+	/** Also allow selecting a CurseForge-format `.zip` modpack, not just `.mrpack`. */
+	allowCurseForge?: boolean
 }
 
 export interface FilePickerProvider {

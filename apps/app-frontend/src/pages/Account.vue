@@ -76,6 +76,16 @@ async function loadSkinTexture(skin: Skin) {
 	}
 }
 
+async function copyUuid() {
+	if (!uuid.value) return
+
+	try {
+		await navigator.clipboard.writeText(uuid.value)
+	} catch (error) {
+		handleError(error as Error)
+	}
+}
+
 async function copyAuthToken() {
 	if (!authToken.value) return
 
@@ -146,6 +156,10 @@ const messages = defineMessages({
 		id: 'app.account.stats.namemc.description',
 		defaultMessage: 'The NameMC page of this account.',
 	},
+	copyUuidButton: {
+		id: 'app.account.stats.uuid.copy-button',
+		defaultMessage: 'Copy UUID',
+	},
 	authTokenTitle: {
 		id: 'app.account.stats.auth-token.title',
 		defaultMessage: 'Auth Token',
@@ -193,7 +207,17 @@ const messages = defineMessages({
 						</h2>
 						<p class="m-0 mt-1">{{ formatMessage(messages.uuidDescription) }}</p>
 					</div>
-					<span class="break-all text-right font-mono text-sm text-primary">{{ uuid }}</span>
+					<div class="flex shrink-0 items-center gap-2">
+						<span class="break-all text-right font-mono text-sm text-primary">{{ uuid }}</span>
+						<button
+							v-tooltip.left="formatMessage(messages.copyUuidButton)"
+							:aria-label="formatMessage(messages.copyUuidButton)"
+							class="flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border-0 bg-surface-4 text-primary shadow-md transition-[filter,transform] duration-200 hover:brightness-[--hover-brightness] focus-visible:brightness-[--hover-brightness] active:scale-95 [&>svg]:size-4"
+							@click="copyUuid"
+						>
+							<CopyIcon />
+						</button>
+					</div>
 				</div>
 
 				<div class="mt-6 flex items-center justify-between gap-4">
