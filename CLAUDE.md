@@ -6,7 +6,7 @@ This is the Modrinth monorepo — it contains all Modrinth projects, both fronte
 
 - **Monorepo tooling:** [Turborepo](https://turbo.build/) (`turbo.jsonc`) + [pnpm workspaces](https://pnpm.io/workspaces) (`pnpm-workspace.yaml`)
 - **Frontend:** Vue 3 / Nuxt 3, Tailwind CSS v3
-- **Backend:** Rust (Labrinth API), Postgres, Clickhouse
+- **Backend:** Rust, Postgres, Clickhouse
 - **Indentation:** Use TAB everywhere, never spaces
 
 ### Apps (`apps/`)
@@ -17,7 +17,6 @@ This is the Modrinth monorepo — it contains all Modrinth projects, both fronte
 | `app-frontend`    | Desktop/app frontend (Vue 3)   |
 | `app`             | Desktop/app shell (Tauri)      |
 | `app-playground`  | Testing playground for app     |
-| `labrinth`        | Backend API service            |
 | `daedalus_client` | Daedalus client implementation |
 | `docs`            | Documentation site (Astro)     |
 
@@ -50,7 +49,6 @@ Run these from the **root** folder before opening a pull request - do not run th
 - **App frontend:** `pnpm prepr:frontend:app`
 - **Frontend libs:** `pnpm prepr:frontend:lib`
 - **All frontend (app+web):** `pnpm prepr`
-- **Labrinth (backend):** See `apps/labrinth/CLAUDE.md`
 
 The website and app `prepr` commands
 
@@ -64,7 +62,6 @@ The website and app `prepr` commands
 
 Each project may have its own `CLAUDE.md` with detailed instructions:
 
-- [`apps/labrinth/AGENTS.md`](apps/labrinth/AGENTS.md) — Backend API
 - [`apps/frontend/CLAUDE.md`](apps/frontend/CLAUDE.md) - Frontend Website
 
 ## Code Guidelines

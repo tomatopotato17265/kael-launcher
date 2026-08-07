@@ -4,11 +4,9 @@ members = [
   "apps/app",
   "apps/app-playground",
   "apps/daedalus_client",
-  "apps/labrinth",
   "packages/app-lib",
   "packages/ariadne",
   "packages/daedalus",
-  "packages/labrinth-derive",
   "packages/modrinth-log",
   "packages/modrinth-maxmind",
   "packages/modrinth-util",
@@ -283,11 +281,3 @@ opt-level = "s"  # Optimize for binary size
 strip = true  # Remove debug symbols
 lto = true  # Enables link to optimizations
 panic = "abort"  # Strip expensive panic clean-up logic
-
-# Specific profile for labrinth production builds
-[profile.release-labrinth]
-inherits = "release"
-opt-level = 2
-strip = false  # Keep debug symbols for Sentry
-lto = "thin"  # Enable LTO but keep compile times reasonable
-panic = "unwind"  # Don't exit the whole app on panic in production
