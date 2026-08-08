@@ -7,7 +7,7 @@ body:
     attributes:
       label: Please confirm the following.
       options:
-        - label: I checked the [existing issues](https://github.com/modrinth/code/issues?q=is%3Aissue) for duplicate feature requests
+        - label: I checked the [existing issues](https://github.com/kael-mc/client/issues?q=is%3Aissue) for duplicate feature requests
           required: true
   - type: dropdown
     id: projects
@@ -16,9 +16,7 @@ body:
       multiple: true
       options:
         - Modrinth App
-        - Modrinth.com website
         - Modrinth Hosting
-        - Modrinth API for developers
   - type: textarea
     attributes:
       label: Is your suggested feature related to a problem? Please describe.

@@ -13,9 +13,7 @@ The use of Modrinth branding elements, including but not limited to the wrench-i
 This includes, but may not be limited to, the following files:
 
 - .idea/icon.svg
-- .github/api_cover.png
-- .github/app_cover.png
-- .github/monorepo_cover.png
-- .github/web_cover.png
+- .github/assets/app_cover.png
+- .github/assets/monorepo_cover.png
 
 If you fork this repository, you must remove all Modrinth branding assets from your fork.

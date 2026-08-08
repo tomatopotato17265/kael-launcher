@@ -111,4 +111,5 @@ jobs:
           releaseBody: Draft release for ${{ env.RELEASE_TAG }}. Review all platform artifacts before publishing.
           releaseDraft: true
           uploadUpdaterJson: false
+          retryAttempts: 3
           args: ${{ matrix.args }}
