@@ -1,24 +1,12 @@
-# ![Modrinth Monorepo Cover](/.github/assets/monorepo_cover.png)
+# Kael Launcher
 
-![Issues](https://img.shields.io/github/issues-raw/Modrinth/code?color=c78aff&label=issues&style=for-the-badge)
-![Pull Requests](https://img.shields.io/github/issues-pr-raw/Modrinth/code?color=c78aff&label=PRs&style=for-the-badge)
-![Contributors](https://img.shields.io/github/contributors/Modrinth/code?color=c78aff&label=contributors&style=for-the-badge)
-![Lines](https://img.shields.io/endpoint?url=https://ghloc.vercel.app/api/modrinth/code/badge?style=flat&logoColor=white&color=c78aff&style=for-the-badge)
-![Commit Activity](https://img.shields.io/github/commit-activity/m/Modrinth/code?color=c78aff&label=commits&style=for-the-badge)
-![Last Commit](https://img.shields.io/github/last-commit/Modrinth/code?color=c78aff&label=last%20commit&style=for-the-badge)
+**THIS PROJECT HAS BEEN ARCHIVED, AS I NO LONGER HAVE THE AVAILABILITY TO WORK ON IT. IF YOU'D LIKE TO TAKE OVER THE PROJECT AND CONTINUE BUILDING KAEL, PLEASE CONTACT ME VIA THE LINKED DISCORD SERVER.**
 
-## Modrinth Monorepo
-
-Welcome to the Modrinth Monorepo, the primary codebase for the Modrinth web interface and app. It contains ![Lines](https://img.shields.io/endpoint?url=https://ghloc.vercel.app/api/modrinth/olympus/badge?logoColor=white&color=black&label=) lines of code and has ![Contributors](https://img.shields.io/github/contributors/Modrinth/code?color=black&label=) contributors!
-
-If you're not a developer and you've stumbled upon this repository, you can access the web interface on the [Modrinth website](https://modrinth.com) and download the latest release of the app [here](https://modrinth.com/app).
+A fork of the Modrinth app, with various features added like CurseForge support, a built-in skin editor, themes, and so, so, SO much more.
 
 ## Development
 
-This repository contains two primary packages. For detailed development information, please refer to their respective guides:
-
-- [Website frontend](https://docs.modrinth.com/contributing/knossos/)
-- [Desktop app](https://docs.modrinth.com/contributing/theseus/)
+Unlike Modrinth's monorepo, this repository only contains the desktop app package. Please review [Modrinth's development guidelines for the Modrinth App](https://docs.modrinth.com/contributing/theseus/) to set up a local repository.
 
 ## Contributing
 
@@ -28,11 +16,11 @@ If you plan to fork this repository for your own purposes, please review our [co
 
 ## Security
 
-If you discover a security vulnerability within our codebase, please follow our [responsible disclosure guidelines](https://modrinth.com/legal/security).
+If you discover a security vulnerability within our codebase, please follow Modrinth's [responsible disclosure guidelines](https://modrinth.com/legal/security). PLEASE ALSO REPORT THIS TO MODRINTH, AS THE SAME VULNERABILITY LIKELY EXISTS WITHIN THE MODRINTH APP.
 
 ## Support
 
-If you need help with the Modrinth web interface or app, please visit our [support page](https://support.modrinth.com). For general inquiries, you can also join our [Discord server](https://discord.modrinth.com).
+If you need help with the Modrinth web interface or app, please join our [Discord server]([https://discord.modrinth.com](https://discord.gg/kPT6rbehm)).
 
 ## Credits
 
@@ -44,5 +32,3 @@ Special thanks to these members for their contributions to Kael.
 
 All packages in this repository are licensed under their respective licenses. Refer to the LICENSE file in each package for more information.
 
-
-> "Kael is a personal project built by a high schooler. Most of the code is forked from the Modrinth App; my additions were written with AI assistance. I made it as a solution to my qualms with Minecraft launchers, and I'm sharing it in case it's useful to others."
