@@ -11,5 +11,10 @@ struct Kael_LauncherApp: App {
         WindowGroup {
             ContentView()
         }
+        .windowStyle(.hiddenTitleBar)
+        .defaultSize(
+            width: WindowConfiguration.defaultSize.width,
+            height: WindowConfiguration.defaultSize.height
+        )
     }
 }

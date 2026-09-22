@@ -14,6 +14,7 @@ struct ContentView: View {
             Text("Hello, world!")
         }
         .padding()
+        .background(TrafficLightInsetter(offset: WindowConfiguration.trafficLightOffset).frame(width: 0, height: 0))
     }
 }
 
