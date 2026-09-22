@@ -16,5 +16,13 @@ struct Kael_LauncherApp: App {
             width: WindowConfiguration.defaultSize.width,
             height: WindowConfiguration.defaultSize.height
         )
+        .commands {
+            CommandMenu("Account") {
+            }
+        }
+
+        Settings {
+            SettingsView()
+        }
     }
 }
