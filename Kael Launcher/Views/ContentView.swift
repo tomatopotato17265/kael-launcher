@@ -6,6 +6,8 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var selectedTab: AppTab = .home
+
     var body: some View {
         VStack {
             Image(systemName: "globe")
@@ -14,7 +16,21 @@ struct ContentView: View {
             Text("Hello, world!")
         }
         .padding()
-        .background(TrafficLightInsetter(offset: WindowConfiguration.trafficLightOffset).frame(width: 0, height: 0))
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("", selection: $selectedTab) {
+                    ForEach(AppTab.allCases) { tab in
+                        if tab == .search {
+                            Image(systemName: "magnifyingglass").tag(tab)
+                        } else {
+                            Text(tab.rawValue).tag(tab)
+                        }
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 360)
+            }
+        }
     }
 }
 
