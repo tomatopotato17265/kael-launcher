@@ -10,7 +10,6 @@ enum AppTab: String, CaseIterable, Identifiable {
     case discover = "Discover"
     case skins = "Skins"
     case library = "Library"
-    case search = "Search"
 
     var id: String { rawValue }
 }
