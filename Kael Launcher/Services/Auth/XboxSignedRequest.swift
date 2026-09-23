@@ -63,7 +63,7 @@ struct XboxSignedResponse<T> {
 }
 
 enum XboxSignedRequest {
-    static let userAgent = "Kael Launcher (https://github.com/tomatopotato/kael-launcher)"
+    static let userAgent = "Kael Launcher (https://github.com/tomatopotato17265/kael-launcher)"
 
     static let jsonDecoder: JSONDecoder = {
         let decoder = JSONDecoder()
