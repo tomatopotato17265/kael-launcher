@@ -6,7 +6,7 @@
 import CryptoKit
 import Foundation
 
-extension Data {
+nonisolated extension Data {
     func base64URLEncodedString() -> String {
         base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
@@ -15,13 +15,13 @@ extension Data {
     }
 }
 
-private extension FixedWidthInteger {
+private nonisolated extension FixedWidthInteger {
     var bigEndianBytes: [UInt8] {
         withUnsafeBytes(of: bigEndian, Array.init)
     }
 }
 
-struct XboxDeviceTokenKey {
+nonisolated struct XboxDeviceTokenKey {
     let id: UUID
     let privateKey: P256.Signing.PrivateKey
     let x: String
@@ -56,13 +56,13 @@ struct XboxDeviceTokenKey {
     }
 }
 
-struct XboxSignedResponse<T> {
+nonisolated struct XboxSignedResponse<T> {
     let value: T
     let response: HTTPURLResponse
     let currentDate: Date
 }
 
-enum XboxSignedRequest {
+nonisolated enum XboxSignedRequest {
     static let userAgent = "Kael Launcher (https://github.com/tomatopotato17265/kael-launcher)"
 
     static let jsonDecoder: JSONDecoder = {

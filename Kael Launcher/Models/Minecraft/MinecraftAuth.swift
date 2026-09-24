@@ -6,7 +6,7 @@
 import Foundation
 
 // the skin and cape
-enum MinecraftCharacterExpressionState: String, Codable {
+nonisolated enum MinecraftCharacterExpressionState: String, Codable {
     case active = "ACTIVE"
     case inactive = "INACTIVE"
     case unknown
@@ -18,7 +18,7 @@ enum MinecraftCharacterExpressionState: String, Codable {
 }
 
 // slim or classic skin
-enum MinecraftSkinVariant: String, Codable {
+nonisolated enum MinecraftSkinVariant: String, Codable {
     case classic = "CLASSIC"
     case slim = "SLIM"
     case unknown
@@ -29,7 +29,7 @@ enum MinecraftSkinVariant: String, Codable {
     }
 }
 
-struct MinecraftSkin: Codable, Identifiable, Equatable {
+nonisolated struct MinecraftSkin: Codable, Identifiable, Equatable {
     let id: UUID
     let state: MinecraftCharacterExpressionState
     let url: URL
@@ -51,7 +51,7 @@ struct MinecraftSkin: Codable, Identifiable, Equatable {
     }
 }
 
-struct MinecraftCape: Codable, Identifiable, Equatable {
+nonisolated struct MinecraftCape: Codable, Identifiable, Equatable {
     let id: UUID
     let state: MinecraftCharacterExpressionState
     let url: URL
@@ -65,7 +65,7 @@ struct MinecraftCape: Codable, Identifiable, Equatable {
     }
 }
 
-struct MinecraftProfile: Codable, Equatable {
+nonisolated struct MinecraftProfile: Codable, Equatable {
     var id: UUID
     var name: String
     var skins: [MinecraftSkin]
@@ -82,7 +82,7 @@ struct MinecraftProfile: Codable, Equatable {
     }
 }
 
-struct MinecraftCredentials: Codable, Identifiable, Equatable {
+nonisolated struct MinecraftCredentials: Codable, Identifiable, Equatable {
     var profile: MinecraftProfile
     var accessToken: String
     var refreshToken: String
@@ -104,14 +104,14 @@ struct MinecraftCredentials: Codable, Identifiable, Equatable {
     }
 }
 
-struct MinecraftLoginFlow {
+nonisolated struct MinecraftLoginFlow {
     let verifier: String
     let challenge: String
     let sessionId: String
     let authRequestURI: URL
 }
 
-enum MinecraftAuthError: Error, LocalizedError {
+nonisolated enum MinecraftAuthError: Error, LocalizedError {
     case invalidResponse(step: String)
     case requestFailed(step: String, underlying: Error)
     case missingSessionId
@@ -137,7 +137,7 @@ enum MinecraftAuthError: Error, LocalizedError {
     }
 }
 
-struct XboxDeviceToken: Codable {
+nonisolated struct XboxDeviceToken: Codable {
     struct DisplayClaims: Codable {
         struct Xui: Codable {
             let uhs: String
@@ -158,7 +158,7 @@ struct XboxDeviceToken: Codable {
     }
 }
 
-struct XboxSisuAuthenticateResponse: Codable {
+nonisolated struct XboxSisuAuthenticateResponse: Codable {
     let msaOauthRedirect: String
 
     enum CodingKeys: String, CodingKey {
@@ -166,7 +166,7 @@ struct XboxSisuAuthenticateResponse: Codable {
     }
 }
 
-struct XboxSisuAuthorizeResponse: Codable {
+nonisolated struct XboxSisuAuthorizeResponse: Codable {
     let titleToken: XboxDeviceToken
     let userToken: XboxDeviceToken
 
@@ -176,7 +176,7 @@ struct XboxSisuAuthorizeResponse: Codable {
     }
 }
 
-struct MicrosoftOAuthTokenResponse: Codable {
+nonisolated struct MicrosoftOAuthTokenResponse: Codable {
     let expiresIn: Int
     let accessToken: String
     let refreshToken: String
@@ -188,11 +188,11 @@ struct MicrosoftOAuthTokenResponse: Codable {
     }
 }
 
-struct MicrosoftOAuthErrorResponse: Codable {
+nonisolated struct MicrosoftOAuthErrorResponse: Codable {
     let error: String
 }
 
-struct MinecraftLauncherLoginResponse: Codable {
+nonisolated struct MinecraftLauncherLoginResponse: Codable {
     let accessToken: String
 
     enum CodingKeys: String, CodingKey {
