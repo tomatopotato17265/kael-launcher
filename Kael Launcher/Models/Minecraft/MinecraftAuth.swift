@@ -118,6 +118,7 @@ nonisolated enum MinecraftAuthError: Error, LocalizedError {
     case missingUserHash
     case notEntitled
     case signInCancelled
+    case oauthError(String)
 
     var errorDescription: String? {
         switch self {
@@ -133,6 +134,8 @@ nonisolated enum MinecraftAuthError: Error, LocalizedError {
             return "This Microsoft account does not own Minecraft."
         case .signInCancelled:
             return "Sign-in was cancelled."
+        case .oauthError(let error):
+            return "Microsoft sign-in failed: \(error)"
         }
     }
 }
