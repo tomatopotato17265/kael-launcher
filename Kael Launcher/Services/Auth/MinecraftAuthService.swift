@@ -67,13 +67,18 @@ actor MinecraftAuthService {
 
         let profile = try await fetchProfile(accessToken: minecraftToken.accessToken)
 
-        return MinecraftCredentials(
+        let credentials = MinecraftCredentials(
             profile: profile,
             accessToken: minecraftToken.accessToken,
             refreshToken: oauthToken.value.refreshToken,
             expires: oauthToken.date.addingTimeInterval(TimeInterval(oauthToken.value.expiresIn)),
             active: true
         )
+
+        try await CredentialStore.shared.upsert(credentials)
+        try await CredentialStore.shared.setActive(id: credentials.id)
+
+        return credentials
     }
 
     func refresh(_ credentials: MinecraftCredentials) async throws -> MinecraftCredentials {
@@ -105,6 +110,9 @@ actor MinecraftAuthService {
         updated.accessToken = minecraftToken.accessToken
         updated.refreshToken = oauthToken.value.refreshToken
         updated.expires = oauthToken.date.addingTimeInterval(TimeInterval(oauthToken.value.expiresIn))
+
+        try await CredentialStore.shared.upsert(updated)
+
         return updated
     }
 
@@ -115,9 +123,17 @@ actor MinecraftAuthService {
             return (pair.key, pair.token, currentDate)
         }
 
+        if deviceTokenPair == nil, let stored = try? await CredentialStore.shared.deviceTokenPair() {
+            deviceTokenPair = stored
+            if stored.token.notAfter > currentDate {
+                return (stored.key, stored.token, currentDate)
+            }
+        }
+
         let key = deviceTokenPair?.key ?? XboxDeviceTokenKey.generate()
         let response = try await requestDeviceToken(key: key, currentDate: currentDate)
         deviceTokenPair = (key, response.value)
+        try? await CredentialStore.shared.setDeviceTokenPair(key: key, token: response.value)
         return (key, response.value, response.currentDate)
     }
 
