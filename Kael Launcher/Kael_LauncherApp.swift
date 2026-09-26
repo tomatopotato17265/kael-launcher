@@ -7,9 +7,12 @@ import SwiftUI
 
 @main
 struct Kael_LauncherApp: App {
+    @StateObject private var accountManager = AccountManager.shared
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(accountManager)
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(

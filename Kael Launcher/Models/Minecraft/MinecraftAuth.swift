@@ -5,6 +5,30 @@
 
 import Foundation
 
+nonisolated extension UUID {
+    init?(mojangString string: String) {
+        if let uuid = UUID(uuidString: string) {
+            self = uuid
+            return
+        }
+        let chars = Array(string)
+        guard chars.count == 32, chars.allSatisfy(\.isHexDigit) else {
+            return nil
+        }
+        let hyphenated = [
+            String(chars[0..<8]),
+            String(chars[8..<12]),
+            String(chars[12..<16]),
+            String(chars[16..<20]),
+            String(chars[20..<32]),
+        ].joined(separator: "-")
+        guard let uuid = UUID(uuidString: hyphenated) else {
+            return nil
+        }
+        self = uuid
+    }
+}
+
 // the skin and cape
 nonisolated enum MinecraftCharacterExpressionState: String, Codable {
     case active = "ACTIVE"
@@ -46,6 +70,30 @@ nonisolated struct MinecraftSkin: Codable, Identifiable, Equatable {
         case name = "alias"
     }
 
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let idString = try container.decode(String.self, forKey: .id)
+        guard let id = UUID(mojangString: idString) else {
+            throw DecodingError.dataCorruptedError(forKey: .id, in: container, debugDescription: "Invalid UUID: \(idString)")
+        }
+        self.id = id
+        state = try container.decode(MinecraftCharacterExpressionState.self, forKey: .state)
+        url = try container.decode(URL.self, forKey: .url)
+        textureKey = try container.decodeIfPresent(String.self, forKey: .textureKey)
+        variant = try container.decode(MinecraftSkinVariant.self, forKey: .variant)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(state, forKey: .state)
+        try container.encode(url, forKey: .url)
+        try container.encodeIfPresent(textureKey, forKey: .textureKey)
+        try container.encode(variant, forKey: .variant)
+        try container.encodeIfPresent(name, forKey: .name)
+    }
+
     var resolvedTextureKey: String {
         textureKey ?? url.lastPathComponent
     }
@@ -63,6 +111,26 @@ nonisolated struct MinecraftCape: Codable, Identifiable, Equatable {
         case url
         case name = "alias"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let idString = try container.decode(String.self, forKey: .id)
+        guard let id = UUID(mojangString: idString) else {
+            throw DecodingError.dataCorruptedError(forKey: .id, in: container, debugDescription: "Invalid UUID: \(idString)")
+        }
+        self.id = id
+        state = try container.decode(MinecraftCharacterExpressionState.self, forKey: .state)
+        url = try container.decode(URL.self, forKey: .url)
+        name = try container.decode(String.self, forKey: .name)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(state, forKey: .state)
+        try container.encode(url, forKey: .url)
+        try container.encode(name, forKey: .name)
+    }
 }
 
 nonisolated struct MinecraftProfile: Codable, Equatable {
@@ -70,6 +138,40 @@ nonisolated struct MinecraftProfile: Codable, Equatable {
     var name: String
     var skins: [MinecraftSkin]
     var capes: [MinecraftCape]
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case skins
+        case capes
+    }
+
+    init(id: UUID, name: String, skins: [MinecraftSkin], capes: [MinecraftCape]) {
+        self.id = id
+        self.name = name
+        self.skins = skins
+        self.capes = capes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let idString = try container.decode(String.self, forKey: .id)
+        guard let id = UUID(mojangString: idString) else {
+            throw DecodingError.dataCorruptedError(forKey: .id, in: container, debugDescription: "Invalid UUID: \(idString)")
+        }
+        self.id = id
+        name = try container.decode(String.self, forKey: .name)
+        skins = try container.decode([MinecraftSkin].self, forKey: .skins)
+        capes = try container.decode([MinecraftCape].self, forKey: .capes)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(name, forKey: .name)
+        try container.encode(skins, forKey: .skins)
+        try container.encode(capes, forKey: .capes)
+    }
 
     static let empty = MinecraftProfile(id: UUID(), name: "", skins: [], capes: [])
 
