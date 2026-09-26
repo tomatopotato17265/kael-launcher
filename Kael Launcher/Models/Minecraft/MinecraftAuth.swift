@@ -204,6 +204,10 @@ nonisolated struct MinecraftCredentials: Codable, Identifiable, Equatable {
     var isExpired: Bool {
         expires <= Date().addingTimeInterval(5 * 60)
     }
+
+    var currentSkin: MinecraftSkin? {
+        profile.currentSkin
+    }
 }
 
 nonisolated struct MinecraftLoginFlow {

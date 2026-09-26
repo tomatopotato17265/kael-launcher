@@ -18,6 +18,10 @@ final class AccountManager: ObservableObject {
     private let authService = MinecraftAuthService.shared
     private let credentialStore = CredentialStore.shared
 
+    var activeSkin: MinecraftSkin? {
+        activeAccount?.currentSkin
+    }
+
     init() {
         Task {
             await refreshAccounts()

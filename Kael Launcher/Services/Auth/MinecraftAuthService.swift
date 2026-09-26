@@ -81,6 +81,10 @@ actor MinecraftAuthService {
         return credentials
     }
 
+    func fetchAvailableSkins(for credentials: MinecraftCredentials) async throws -> [MinecraftSkin] {
+        try await fetchProfile(accessToken: credentials.accessToken).skins
+    }
+
     func refresh(_ credentials: MinecraftCredentials) async throws -> MinecraftCredentials {
         guard credentials.isExpired else {
             return credentials
