@@ -145,7 +145,7 @@ nonisolated struct XboxDeviceToken: Codable {
         struct Xui: Codable {
             let uhs: String
         }
-        let xui: [Xui]
+        let xui: [Xui]?
     }
 
     let issueInstant: Date

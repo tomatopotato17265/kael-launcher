@@ -323,7 +323,7 @@ actor MinecraftAuthService {
     }
 
     private func requestMinecraftToken(xboxToken: XboxDeviceToken) async throws -> MinecraftLauncherLoginResponse {
-        guard let uhs = xboxToken.displayClaims?.xui.first?.uhs else {
+        guard let uhs = xboxToken.displayClaims?.xui?.first?.uhs else {
             throw MinecraftAuthError.missingUserHash
         }
 
