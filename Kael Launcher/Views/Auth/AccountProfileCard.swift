@@ -10,17 +10,17 @@ struct AccountProfileCard: View {
     @Binding var isPresented: Bool
     @State private var faceImage: NSImage?
 
-    private let avatarSize: CGFloat = 132
+    private let avatarSize: CGFloat = 96
 
     var body: some View {
         VStack(spacing: 0) {
             banner
             rowsSection
-                .padding(24)
+                .padding(20)
             Divider()
             closeBar
         }
-        .frame(width: 560)
+        .frame(width: 420)
         .background(Color(nsColor: .windowBackgroundColor))
         .clipShape(RoundedRectangle(cornerRadius: 24))
         .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(Color.secondary.opacity(0.2), lineWidth: 1))
@@ -36,32 +36,33 @@ struct AccountProfileCard: View {
                 gradient: Gradient(colors: [Color.accentColor, Color(nsColor: .windowBackgroundColor)]),
                 center: .top,
                 startRadius: 10,
-                endRadius: 340
+                endRadius: 260
             )
 
-            VStack(spacing: 16) {
+            VStack(spacing: 12) {
                 Group {
                     if let faceImage {
                         Image(nsImage: faceImage)
                             .resizable()
                             .interpolation(.none)
                     } else {
-                        RoundedRectangle(cornerRadius: 22)
+                        RoundedRectangle(cornerRadius: 16)
                             .fill(Color.secondary.opacity(0.3))
                     }
                 }
                 .frame(width: avatarSize, height: avatarSize)
-                .clipShape(RoundedRectangle(cornerRadius: 22))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
 
                 if let name = accountManager.activeAccount?.profile.name {
                     Text(name)
-                        .font(.system(size: 32, weight: .bold))
+                        .font(.title2)
+                        .fontWeight(.bold)
                         .foregroundStyle(.white)
                 }
             }
-            .padding(.vertical, 40)
+            .padding(.vertical, 32)
         }
-        .frame(height: 280)
+        .frame(height: 210)
     }
 
     private var rowsSection: some View {
@@ -69,16 +70,16 @@ struct AccountProfileCard: View {
             ForEach(Array(accountManager.accounts.enumerated()), id: \.element.id) { index, account in
                 AccountRow(account: account, isPresented: $isPresented)
                 if index < accountManager.accounts.count - 1 {
-                    Divider().padding(.leading, 70)
+                    Divider().padding(.leading, 56)
                 }
             }
             if !accountManager.accounts.isEmpty {
-                Divider().padding(.leading, 70)
+                Divider().padding(.leading, 56)
             }
             AddAccountRow(isPresented: $isPresented)
         }
         .background(Color.secondary.opacity(0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 18))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     private var closeBar: some View {
@@ -88,15 +89,15 @@ struct AccountProfileCard: View {
                 isPresented = false
             } label: {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 15, weight: .semibold))
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 8)
+                    .fontWeight(.semibold)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 6)
             }
             .buttonStyle(.plain)
             .background(Color.secondary.opacity(0.2))
             .clipShape(Capsule())
         }
-        .padding(16)
+        .padding(12)
     }
 
     private func updateFaceImage() async {
@@ -120,21 +121,21 @@ private struct AccountRow: View {
                 isPresented = false
                 Task { await accountManager.switchAccount(to: account.id) }
             } label: {
-                HStack(spacing: 14) {
+                HStack(spacing: 12) {
                     Group {
                         if let faceImage {
                             Image(nsImage: faceImage)
                                 .resizable()
                                 .interpolation(.none)
                         } else {
-                            RoundedRectangle(cornerRadius: 8).fill(Color.secondary.opacity(0.2))
+                            RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.2))
                         }
                     }
-                    .frame(width: 36, height: 36)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .frame(width: 28, height: 28)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
 
                     Text(account.profile.name)
-                        .font(.system(size: 16, weight: .semibold))
+                        .fontWeight(.semibold)
                         .foregroundStyle(
                             account.id == accountManager.activeAccount?.id ? Color.accentColor : Color.primary
                         )
@@ -152,14 +153,14 @@ private struct AccountRow: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .task(id: account.currentSkin?.resolvedTextureKey) {
             guard let skin = account.currentSkin else {
                 faceImage = nil
                 return
             }
-            faceImage = try? await PlayerFaceRenderer.shared.face(for: skin, size: 72)
+            faceImage = try? await PlayerFaceRenderer.shared.face(for: skin, size: 56)
         }
     }
 }
@@ -173,19 +174,18 @@ private struct AddAccountRow: View {
             isPresented = false
             Task { await accountManager.login() }
         } label: {
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 Image(systemName: "person.badge.plus")
-                    .font(.system(size: 18))
-                    .frame(width: 36, height: 36)
+                    .frame(width: 28, height: 28)
                 Text("Add Account")
-                    .font(.system(size: 16, weight: .semibold))
+                    .fontWeight(.semibold)
                 Spacer()
                 Image(systemName: "chevron.right")
                     .foregroundStyle(.secondary)
             }
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
     }
 }
