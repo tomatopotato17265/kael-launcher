@@ -50,6 +50,11 @@ final class SignInWindowController: NSObject, WKNavigationDelegate, NSWindowDele
         NSApp.requestUserAttention(.criticalRequest)
 
         webView.load(URLRequest(url: url))
+
+        Task {
+            try? await Task.sleep(nanoseconds: 10 * 60 * 1_000_000_000)
+            finish(code: nil)
+        }
     }
 
     func webView(

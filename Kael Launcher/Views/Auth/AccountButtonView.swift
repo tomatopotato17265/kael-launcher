@@ -33,6 +33,15 @@ struct AccountButtonView: View {
             .frame(width: buttonSize, height: buttonSize)
             .clipShape(RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.secondary.opacity(0.3), lineWidth: 1))
+            .overlay {
+                if accountManager.isSigningIn {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(.black.opacity(0.4))
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(.white)
+                }
+            }
         }
         .buttonStyle(.plain)
         .disabled(accountManager.isSigningIn)

@@ -17,6 +17,7 @@ final class AccountManager: ObservableObject {
 
     private let authService = MinecraftAuthService.shared
     private let credentialStore = CredentialStore.shared
+    private var errorToken = 0
 
     var activeSkin: MinecraftSkin? {
         activeAccount?.currentSkin
@@ -34,9 +35,11 @@ final class AccountManager: ObservableObject {
 
             var refreshed: [MinecraftCredentials] = []
             for credentials in stored {
-                if let updated = try? await authService.refresh(credentials) {
-                    refreshed.append(updated)
-                } else {
+                do {
+                    refreshed.append(try await authService.refresh(credentials))
+                } catch MinecraftAuthError.oauthError("invalid_grant") {
+                    try? await credentialStore.remove(id: credentials.id)
+                } catch {
                     refreshed.append(credentials)
                 }
             }
@@ -45,9 +48,16 @@ final class AccountManager: ObservableObject {
             accounts = refreshed
 
             let activeId = try await credentialStore.activeAccountId()
-            activeAccount = refreshed.first { $0.id == activeId } ?? refreshed.first
+            if let match = refreshed.first(where: { $0.id == activeId }) {
+                activeAccount = match
+            } else if let fallback = refreshed.first {
+                activeAccount = fallback
+                try? await credentialStore.setActive(id: fallback.id)
+            } else {
+                activeAccount = nil
+            }
         } catch {
-            lastError = error
+            present(error)
         }
     }
 
@@ -66,7 +76,7 @@ final class AccountManager: ObservableObject {
             _ = try await authService.finishLogin(code: code, flow: flow)
             await refreshAccounts()
         } catch {
-            lastError = error
+            present(error)
         }
     }
 
@@ -75,7 +85,7 @@ final class AccountManager: ObservableObject {
             try await credentialStore.setActive(id: id)
             await refreshAccounts()
         } catch {
-            lastError = error
+            present(error)
         }
     }
 
@@ -89,7 +99,20 @@ final class AccountManager: ObservableObject {
                 await refreshAccounts()
             }
         } catch {
-            lastError = error
+            present(error)
+        }
+    }
+
+    private func present(_ error: Error) {
+        errorToken += 1
+        let token = errorToken
+        lastError = error
+
+        Task {
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if errorToken == token {
+                lastError = nil
+            }
         }
     }
 }

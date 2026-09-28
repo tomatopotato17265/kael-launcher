@@ -6,6 +6,7 @@
 import SwiftUI
 
 struct ContentView: View {
+    @EnvironmentObject private var accountManager: AccountManager
     @State private var selectedTab: AppTab = .home
     @State private var isProfileCardPresented = false
 
@@ -42,7 +43,21 @@ struct ContentView: View {
                 .padding(.trailing, 16)
                 .ignoresSafeArea(edges: .top)
         }
+        .overlay(alignment: .bottom) {
+            if let error = accountManager.lastError {
+                Text(error.localizedDescription)
+                    .font(.footnote)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.red.opacity(0.85), in: RoundedRectangle(cornerRadius: 10))
+                    .padding(.bottom, 24)
+                    .onTapGesture { accountManager.lastError = nil }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .animation(.easeInOut(duration: 0.15), value: isProfileCardPresented)
+        .animation(.easeInOut(duration: 0.2), value: accountManager.lastError?.localizedDescription)
     }
 }
 
