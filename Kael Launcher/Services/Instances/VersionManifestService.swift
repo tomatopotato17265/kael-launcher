@@ -3,6 +3,7 @@
 //  Kael Launcher
 //
 
+import CryptoKit
 import Foundation
 
 actor VersionManifestService {
@@ -50,6 +51,35 @@ actor VersionManifestService {
         }
     }
 
+    func fetchVersionInfo(for versionID: String) async throws -> MinecraftVersionInfo {
+        let manifest = try await fetchManifest()
+        guard let summary = manifest.versions.first(where: { $0.id == versionID }) else {
+            throw VersionManifestError.versionNotFound(versionID)
+        }
+
+        let fileURL = LauncherDirectories.metaDirectory.appendingPathComponent("\(versionID).json")
+        if let data = try? Data(contentsOf: fileURL),
+           Self.sha1Hex(of: data) == summary.sha1,
+           let info = try? decoder.decode(MinecraftVersionInfo.self, from: data) {
+            return info
+        }
+
+        let (data, response) = try await session.data(from: summary.url)
+        guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
+            throw VersionManifestError.invalidResponse
+        }
+        guard Self.sha1Hex(of: data) == summary.sha1 else {
+            throw VersionManifestError.checksumMismatch(versionID)
+        }
+        let info = try decoder.decode(MinecraftVersionInfo.self, from: data)
+        try? data.write(to: fileURL, options: .atomic)
+        return info
+    }
+
+    private static func sha1Hex(of data: Data) -> String {
+        Insecure.SHA1.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     private func downloadManifest() async throws -> MinecraftVersionManifest {
         let (data, response) = try await session.data(from: Self.manifestURL)
         guard let httpResponse = response as? HTTPURLResponse, (200..<300).contains(httpResponse.statusCode) else {
@@ -81,4 +111,6 @@ actor VersionManifestService {
 
 nonisolated enum VersionManifestError: Error {
     case invalidResponse
+    case versionNotFound(String)
+    case checksumMismatch(String)
 }
